@@ -1,5 +1,26 @@
 import { MeritListEntry, FeeItem, FAQItem } from "../types";
 
+export const testimonialsData = [
+  {
+    id: "testimonial-aisha",
+    rating: 5,
+    quote: "The faculty gave me the confidence and scientific foundation to pursue my dream of studying medicine.",
+    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80",
+    name: "Aisha Rahman",
+    programOrRelation: "F.Sc Pre-Medical",
+    year: "Class of 2025",
+  },
+  {
+    id: "testimonial-hamza",
+    rating: 5,
+    quote: "The practical labs and supportive mentors made complex biotechnology concepts feel real and exciting.",
+    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80",
+    name: "Hamza Malik",
+    programOrRelation: "BS Biotechnology",
+    year: "Class of 2026",
+  },
+];
+
 export const feeStructureData: FeeItem[] = [
   {
     groupName: "F.Sc Pre-Medical",
@@ -94,6 +115,12 @@ export const admissionStepsPakistan = [
     title: "College Roll Number & Orientation Day",
     description: "Submit the verified paid fee challan copy to Student Affairs, collect College ID card, uniform voucher, class section timetable, and attend Freshmen Orientation.",
   },
+];
+
+export const admissionDeadlines = [
+  { event: "Admission form submission", date: "August 15, 2026", status: "Closed" },
+  { event: "1st merit list fee deadline", date: "August 28, 2026", status: "Active" },
+  { event: "2nd merit list fee deadline", date: "September 09, 2026", status: "Upcoming" },
 ];
 
 export const faqsData: FAQItem[] = [

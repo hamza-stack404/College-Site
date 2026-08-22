@@ -36,7 +36,7 @@ export function generateMetadata({ params }: FacultyDetailPageProps) {
 
   return {
     title: `${member.name} — ${member.designation}`,
-    description: member.bio,
+    description: `${member.name} teaches ${member.subject} at Bahria College Hanif.`,
   };
 }
 
@@ -76,54 +76,46 @@ export default function FacultyDetailPage({ params }: FacultyDetailPageProps) {
                   About {member.name}
                 </h2>
                 <p className="text-sm sm:text-base text-slate-600 dark:text-slate-300 leading-relaxed">
-                  {member.bio}
+                  {member.name} teaches {member.subject} and brings {member.experienceYears} years of
+                  experience to the classroom.
                 </p>
 
                 {/* Research Interests */}
                 <div className="pt-4 space-y-3">
                   <h3 className="font-display font-bold text-lg text-slate-900 dark:text-white">
-                    Primary Research Domains
+                    Subjects Taught
                   </h3>
                   <div className="flex flex-wrap gap-2">
-                    {member.researchInterests.map((interest, idx) => (
+                    {member.subjectsTaught.map((subject, idx) => (
                       <span
                         key={idx}
                         className="px-3 py-1 rounded-xl bg-medical-50 dark:bg-medical-950/80 border border-medical-200 dark:border-medical-800 text-xs font-semibold text-medical-800 dark:text-medical-300"
                       >
-                        {interest}
+                        {subject}
                       </span>
                     ))}
                   </div>
                 </div>
               </div>
 
-              {/* Peer-Reviewed Publications */}
+              {/* Teaching expertise */}
               <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-10 shadow-sm space-y-6">
                 <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
                   <h3 className="font-display font-bold text-xl text-slate-900 dark:text-white flex items-center gap-2">
                     <BookOpen className="w-5 h-5 text-gold-500" />
-                    <span>Peer-Reviewed Publications ({member.publications.length})</span>
+                    <span>Teaching Expertise</span>
                   </h3>
                 </div>
 
                 <div className="space-y-4">
-                  {member.publications.map((pub, idx) => (
+                  {member.subjectsTaught.map((subject, idx) => (
                     <div
                       key={idx}
                       className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-700/60 space-y-2"
                     >
-                      <div className="text-xs font-bold text-gold-600 dark:text-gold-400">
-                        {pub.journal} • {pub.year}
-                      </div>
                       <h4 className="font-display font-bold text-base text-slate-900 dark:text-white leading-snug">
-                        &ldquo;{pub.title}&rdquo;
+                        {subject}
                       </h4>
-                      {pub.doi && (
-                        <div className="text-xs text-slate-400 font-mono pt-1 flex items-center gap-1">
-                          <span>DOI: {pub.doi}</span>
-                          <ExternalLink className="w-3 h-3 text-medical-500" />
-                        </div>
-                      )}
                     </div>
                   ))}
                 </div>
@@ -136,7 +128,7 @@ export default function FacultyDetailPage({ params }: FacultyDetailPageProps) {
                   <span>Current Teaching Curriculum</span>
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                  {member.coursesTaught.map((course, idx) => (
+                  {member.subjectsTaught.map((course, idx) => (
                     <div
                       key={idx}
                       className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2"
@@ -177,8 +169,8 @@ export default function FacultyDetailPage({ params }: FacultyDetailPageProps) {
                     <Mail className="w-4 h-4 text-medical-500 flex-shrink-0 mt-0.5" />
                     <div>
                       <div className="font-bold text-slate-900 dark:text-white">Email Address</div>
-                      <a href={`mailto:${member.email}`} className="text-medical-600 hover:underline">
-                        {member.email}
+                      <a href="mailto:admissions@bahriahanif.edu.pk" className="text-medical-600 hover:underline">
+                        admissions@bahriahanif.edu.pk
                       </a>
                     </div>
                   </div>
@@ -187,7 +179,7 @@ export default function FacultyDetailPage({ params }: FacultyDetailPageProps) {
                     <Phone className="w-4 h-4 text-medical-500 flex-shrink-0 mt-0.5" />
                     <div>
                       <div className="font-bold text-slate-900 dark:text-white">Office Extension</div>
-                      <span>{member.phone}</span>
+                      <span>Contact the college office</span>
                     </div>
                   </div>
 
@@ -195,7 +187,7 @@ export default function FacultyDetailPage({ params }: FacultyDetailPageProps) {
                     <MapPin className="w-4 h-4 text-gold-500 flex-shrink-0 mt-0.5" />
                     <div>
                       <div className="font-bold text-slate-900 dark:text-white">Office Location</div>
-                      <span>{member.office}</span>
+                      <span>{member.department}</span>
                     </div>
                   </div>
                 </div>

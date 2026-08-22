@@ -1,4 +1,11 @@
 export type GroupSlug = 'pre-medical' | 'pre-engineering' | 'computer-science';
+export type ProgramCategory =
+  | 'pre-medical'
+  | 'medical-sciences'
+  | 'biological-sciences'
+  | 'computer-health-informatics'
+  | 'pre-engineering'
+  | 'cambridge-international';
 
 export interface SubjectItem {
   name: string;
@@ -70,6 +77,20 @@ export interface PositionHolder {
   currentInstitution: string;
 }
 
+export interface Alumnus {
+  id: string;
+  name: string;
+  graduationYear: number;
+  program: string;
+  currentRole: string;
+  institutionOrCompany: string;
+  location: string;
+  quote: string;
+  story: string;
+  image: string;
+  verifiedBadge?: string;
+}
+
 export interface FacilityItem {
   id: string;
   name: string;
@@ -84,7 +105,7 @@ export interface Lecturer {
   id: string;
   name: string;
   subject: string;
-  designation: "Head of Department & Senior Lecturer" | "Senior Lecturer" | "Lecturer" | "Lab Demonstrator";
+  designation: "Head of Department & Senior Lecturer" | "Senior Lecturer" | "Lecturer" | "Lecturer & Lab In-Charge" | "Senior Lecturer & College Khatib" | "Lab Demonstrator";
   qualification: string;
   experienceYears: number;
   image: string;
@@ -130,12 +151,14 @@ export interface GalleryItem {
 }
 
 export interface NewsArticle {
+  id: string;
   slug: string;
   title: string;
   summary: string;
   category: string;
   publishedAt: string;
   readTime: string;
+  featured?: boolean;
   coverImage: string;
   author: { name: string; role: string; avatar: string };
   content: string[];
@@ -143,6 +166,7 @@ export interface NewsArticle {
 }
 
 export interface CampusEvent {
+  id: string;
   slug: string;
   title: string;
   description: string;
@@ -152,6 +176,7 @@ export interface CampusEvent {
   time: string;
   venue: string;
   coverImage: string;
+  rsvpOpen?: boolean;
   totalSeats: number;
   registeredSeats: number;
   speaker?: { name: string; title: string; organization: string };
@@ -162,6 +187,7 @@ export interface Program {
   slug: string;
   title: string;
   shortTitle: string;
+  category: ProgramCategory;
   department: string;
   degreeLevel: string;
   badge?: string;

@@ -97,13 +97,12 @@ export default function AdmissionsPage() {
               <table className="w-full text-left text-xs sm:text-sm">
                 <thead>
                   <tr className="bg-navy-950 text-white font-bold uppercase text-[11px] tracking-wider">
-                    <th className="py-4 px-5">Academic Program</th>
-                    <th className="py-4 px-5">Degree Level</th>
+                    <th className="py-4 px-5">Academic Group</th>
                     <th className="py-4 px-5">One-Time Admission</th>
-                    <th className="py-4 px-5">Tuition / Semester</th>
-                    <th className="py-4 px-5">Lab & Security (Refundable)</th>
-                    <th className="py-4 px-5">Exam & Library / Sem</th>
-                    <th className="py-4 px-5">Annual Total</th>
+                    <th className="py-4 px-5">Tuition / Month</th>
+                    <th className="py-4 px-5">Science Lab / Month</th>
+                    <th className="py-4 px-5">Registration</th>
+                    <th className="py-4 px-5">Annual Examination</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
@@ -113,27 +112,22 @@ export default function AdmissionsPage() {
                       className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
                     >
                       <td className="py-4 px-5 font-bold text-slate-900 dark:text-white">
-                        {fee.programName}
+                        {fee.groupName}
                       </td>
                       <td className="py-4 px-5">
-                        <Badge variant="slate" size="sm">
-                          {fee.category}
-                        </Badge>
-                      </td>
-                      <td className="py-4 px-5 text-slate-600 dark:text-slate-300">
                         {formatCurrency(fee.admissionFee)}
                       </td>
+                      <td className="py-4 px-5 text-slate-600 dark:text-slate-300">
+                        {formatCurrency(fee.monthlyTuitionFee)}
+                      </td>
                       <td className="py-4 px-5 font-bold text-medical-600 dark:text-medical-400">
-                        {formatCurrency(fee.tuitionPerSemester)}
+                        {formatCurrency(fee.scienceLabMonthlyFee)}
                       </td>
                       <td className="py-4 px-5 text-slate-600 dark:text-slate-300">
-                        {formatCurrency(fee.labSecurityOneTime)}
+                        {formatCurrency(fee.prospectusAndRegistrationFee)}
                       </td>
                       <td className="py-4 px-5 text-slate-600 dark:text-slate-300">
-                        {formatCurrency(fee.examinationFeePerSemester)}
-                      </td>
-                      <td className="py-4 px-5 font-black text-navy-950 dark:text-white font-display">
-                        {formatCurrency(fee.annualTotal)}
+                        {formatCurrency(fee.annualExaminationFee)}
                       </td>
                     </tr>
                   ))}

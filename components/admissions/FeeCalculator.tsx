@@ -8,33 +8,34 @@ import { Button } from "../ui/Button";
 
 export const FeeCalculator: React.FC = () => {
   const [selectedProgramId, setSelectedProgramId] = useState<string>(
-    feeStructureData[0].programId
+    feeStructureData[0].groupName
   );
   const [scholarshipPercent, setScholarshipPercent] = useState<number>(0);
   const [includeHostel, setIncludeHostel] = useState<boolean>(false);
   const [includeTransport, setIncludeTransport] = useState<boolean>(false);
 
   const currentProgramFee =
-    feeStructureData.find((p) => p.programId === selectedProgramId) ||
+    feeStructureData.find((p) => p.groupName === selectedProgramId) ||
     feeStructureData[0];
 
   const hostelPerSemester = 45000;
   const transportPerSemester = 22000;
 
-  const baseTuition = currentProgramFee.tuitionPerSemester;
+  const baseTuition = currentProgramFee.monthlyTuitionFee * 6;
   const scholarshipDiscount = (baseTuition * scholarshipPercent) / 100;
   const netTuition = baseTuition - scholarshipDiscount;
 
   const semesterTotal =
     netTuition +
-    currentProgramFee.examinationFeePerSemester +
+    currentProgramFee.annualExaminationFee / 2 +
     (includeHostel ? hostelPerSemester : 0) +
     (includeTransport ? transportPerSemester : 0);
 
   const firstSemesterTotalWithAdmission =
     semesterTotal +
     currentProgramFee.admissionFee +
-    currentProgramFee.labSecurityOneTime;
+    currentProgramFee.scienceLabMonthlyFee * 6 +
+    currentProgramFee.prospectusAndRegistrationFee;
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-10 shadow-xl" id="fee-calculator">
@@ -66,8 +67,8 @@ export const FeeCalculator: React.FC = () => {
               className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm font-medium focus:ring-2 focus:ring-medical-500 focus:outline-none"
             >
               {feeStructureData.map((f) => (
-                <option key={f.programId} value={f.programId}>
-                  {f.programName} ({f.category})
+                <option key={f.groupName} value={f.groupName}>
+                  {f.groupName}
                 </option>
               ))}
             </select>
@@ -152,7 +153,7 @@ export const FeeCalculator: React.FC = () => {
               Estimated Fee Breakdown
             </div>
             <h4 className="font-display font-bold text-lg text-white mt-1">
-              {currentProgramFee.programName}
+              {currentProgramFee.groupName}
             </h4>
 
             <div className="mt-6 space-y-2.5 text-xs text-slate-300 border-b border-navy-800 pb-4">
@@ -171,7 +172,7 @@ export const FeeCalculator: React.FC = () => {
               <div className="flex justify-between">
                 <span>Semester Examination & Library Dues</span>
                 <span className="font-semibold text-white">
-                  {formatCurrency(currentProgramFee.examinationFeePerSemester)}
+                  {formatCurrency(currentProgramFee.annualExaminationFee / 2)}
                 </span>
               </div>
               {includeHostel && (
@@ -214,7 +215,7 @@ export const FeeCalculator: React.FC = () => {
                   1st Semester Initial Total:
                 </span>
                 <span className="text-[10px] text-slate-400">
-                  Includes One-Time Admission ({formatCurrency(currentProgramFee.admissionFee)}) & Refundable Lab Security ({formatCurrency(currentProgramFee.labSecurityOneTime)})
+                  Includes One-Time Admission ({formatCurrency(currentProgramFee.admissionFee)}) & Registration ({formatCurrency(currentProgramFee.prospectusAndRegistrationFee)})
                 </span>
               </div>
               <span className="font-bold text-gold-300 text-sm ml-2">

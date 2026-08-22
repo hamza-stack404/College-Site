@@ -13,7 +13,6 @@ import {
   CheckCircle,
 } from "lucide-react";
 import { programsData } from "@/lib/data/programs";
-import { ProgramCategory } from "@/lib/types";
 import { SectionHeader } from "../shared/SectionHeader";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";

@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import confetti from "canvas-confetti";
-import { admissionSteps, admissionDeadlines } from "@/lib/data/admissions";
+import { admissionStepsPakistan as admissionSteps, admissionDeadlines } from "@/lib/data/admissions";
 import { admissionInquirySchema, AdmissionInquiryData } from "@/lib/validations/forms";
 import { CheckCircle2, Sparkles, Send, FileText, Calendar, ArrowRight, Download } from "lucide-react";
 import { Button } from "../ui/Button";
