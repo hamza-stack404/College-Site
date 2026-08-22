@@ -1,0 +1,57 @@
+import { NoticeItem } from "../types";
+
+export const noticesData: NoticeItem[] = [
+  {
+    id: "notice-merit-list-1",
+    title: "1st Merit List for Admissions Session 2026–2027 (Pre-Med, Pre-Eng & ICS)",
+    category: "Merit List",
+    date: "2026-08-20",
+    description: "The 1st Merit List of candidates selected for admission into F.Sc Pre-Medical, F.Sc Pre-Engineering, and ICS has been displayed. Successful applicants must deposit their admission fee and submit verified original documents by August 28, 2026.",
+    fileDownloadUrl: "#",
+    fileSize: "1.4 MB",
+    isPinned: true,
+    isUrgent: true,
+  },
+  {
+    id: "notice-date-sheet-sendups",
+    title: "Date Sheet for College Pre-Board Send-up Examinations (HSSC Part I & II)",
+    category: "Date Sheet",
+    date: "2026-08-15",
+    description: "The comprehensive date sheet for the upcoming Annual Pre-Board Send-up Examinations for 1st Year and 2nd Year students is released. Examinations will commence strictly at 08:30 AM in College Examination Halls A & B.",
+    fileDownloadUrl: "#",
+    fileSize: "850 KB",
+    isPinned: true,
+  },
+  {
+    id: "notice-roll-no-slips",
+    title: "Distribution of BISE Board Annual Examination Roll Number Slips (Part-II)",
+    category: "Roll No Slip",
+    date: "2026-08-10",
+    description: "Students of 2nd Year (Pre-Medical, Pre-Engineering, ICS) are directed to collect their official BISE Examination Roll Number Slips from the Student Affairs Office (Window 2) after clearing college library and fee dues.",
+    fileDownloadUrl: "#",
+    fileSize: "620 KB",
+  },
+  {
+    id: "notice-fee-deadline",
+    title: "Final Reminder: Monthly Tuition Fee Clearance for the Current Quarter",
+    category: "Fee Due Date",
+    date: "2026-08-05",
+    description: "Parents and students are requested to clear all pending monthly tuition and science lab dues at the College Accounts Branch or via designated bank branches by the 10th of this month to avoid late fee surcharge.",
+  },
+  {
+    id: "notice-independence-day-holiday",
+    title: "Independence Day Celebrations & College Holiday Notification",
+    category: "Holidays",
+    date: "2026-08-12",
+    description: "The college will observe flag hoisting ceremonies on 14th August at 08:00 AM in the Main Courtyard followed by National Anthem and student speeches. College will remain closed on 15th August.",
+  },
+  {
+    id: "notice-practical-schedules",
+    title: "Practical Notebook Submission & Mock Viva Schedule (Biology, Chemistry, Physics & CS)",
+    category: "General Notice",
+    date: "2026-07-28",
+    description: "All intermediate science students must submit their certified practical lab notebooks to their respective subject demonstrators for signature verification before the commencement of board practical exams.",
+    fileDownloadUrl: "#",
+    fileSize: "450 KB",
+  },
+];
