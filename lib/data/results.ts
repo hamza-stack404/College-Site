@@ -64,8 +64,5 @@ export const positionHoldersData: PositionHolder[] = [
 ];
 
 export const biseResultLinks = [
-  { name: "BISE Karachi Intermediate Board Result Portal", url: "https://biek.edu.pk", region: "Sindh" },
   { name: "Federal Board (FBISE) Islamabad HSSC Result", url: "https://www.fbise.edu.pk", region: "Federal" },
-  { name: "BISE Lahore Board Intermediate Result Verification", url: "https://www.biselahore.com", region: "Punjab" },
-  { name: "BISE Rawalpindi Board Result Inquiry", url: "https://www.biserawalpindi.edu.pk", region: "Punjab" },
 ];

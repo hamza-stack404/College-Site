@@ -40,8 +40,8 @@ export const programsData: Program[] = [
       "MDCAT Digital Testing Computer Center (120 workstations)",
     ],
     facultyLead: {
-      name: "Prof. Dr. Tariq Mahmood Khan",
-      designation: "Dean of Medical Sciences & Senior Faculty Chair",
+      name: "Miss Rabia Faisla",
+      designation: "Senior Biology Lecturar",
       qualification: "Ph.D. in Cellular Biology (Imperial College London), M.Phil",
       image: "https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&w=600&q=80",
     },
@@ -49,7 +49,7 @@ export const programsData: Program[] = [
       {
         semester: "Year 1 (Part I)",
         courses: [
-          { code: "BIO-101", name: "Cell Biology, Genetics & Biological Molecules", creditHours: 4 },
+          { code: "BIO", name: "Cell Biology, Genetics & Biological Molecules", creditHours: 4 },
           { code: "BIO-101L", name: "Biology Practical: Microscopic Analysis & Dissection", creditHours: 2, isLab: true },
           { code: "CHM-101", name: "Physical & Inorganic Chemistry Foundations", creditHours: 4 },
           { code: "CHM-101L", name: "Qualitative Salt Analysis & Volumetric Lab", creditHours: 2, isLab: true },

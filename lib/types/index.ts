@@ -1,11 +1,8 @@
 export type GroupSlug = 'pre-medical' | 'pre-engineering' | 'computer-science';
 export type ProgramCategory =
   | 'pre-medical'
-  | 'medical-sciences'
-  | 'biological-sciences'
-  | 'computer-health-informatics'
   | 'pre-engineering'
-  | 'cambridge-international';
+  | 'computer science';
 
 export interface SubjectItem {
   name: string;

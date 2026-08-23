@@ -74,7 +74,7 @@ export default function HomePage() {
             className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-gold-500/40 text-gold-300 text-xs sm:text-sm font-semibold shadow-xl"
           >
             <ShieldCheck className="w-4 h-4 text-gold-400" />
-            <span>Affiliated with Board of Intermediate & Secondary Education (BISE) & FBISE</span>
+            <span>Affiliated with Federal Board of Intermediate & Secondary Education (FBISE)</span>
           </motion.div>
 
           {/* Main Headline */}
