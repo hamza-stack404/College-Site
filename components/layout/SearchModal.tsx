@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, X, BookOpen, User, Calendar, Newspaper, ArrowRight, FileText, Award, Microscope } from "lucide-react";
 import { intermediateGroupsData } from "@/lib/data/groups";
-import { noticesData } from "@/lib/data/notices";
+import { initialNoticesData } from "@/lib/data/notices";
 import { positionHoldersData } from "@/lib/data/results";
 import { facultyData } from "@/lib/data/faculty";
 import { facilitiesData } from "@/lib/data/facilities";
@@ -47,7 +47,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
         icon: BookOpen,
       }));
 
-    const matchedNotices = noticesData
+    const matchedNotices = initialNoticesData
       .filter((n) => n.title.toLowerCase().includes(q) || n.description.toLowerCase().includes(q) || n.category.toLowerCase().includes(q))
       .map((n) => ({
         type: "Notice",
@@ -68,11 +68,11 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
       }));
 
     const matchedFaculty = facultyData
-      .filter((f) => f.name.toLowerCase().includes(q) || f.subject.toLowerCase().includes(q) || f.department.toLowerCase().includes(q))
+      .filter((f) => f.name.toLowerCase().includes(q) || (f.subject && f.subject.toLowerCase().includes(q)) || f.qualification.toLowerCase().includes(q))
       .map((f) => ({
-        type: "Lecturer",
+        type: "Staff / Teacher",
         title: f.name,
-        subtitle: `${f.designation} — ${f.subject}`,
+        subtitle: `${f.role} ${f.subject ? `— ${f.subject}` : ""}`,
         href: `/faculty`,
         icon: User,
       }));

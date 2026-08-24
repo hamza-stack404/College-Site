@@ -1,8 +1,4 @@
 export type GroupSlug = 'pre-medical' | 'pre-engineering' | 'computer-science';
-export type ProgramCategory =
-  | 'pre-medical'
-  | 'pre-engineering'
-  | 'computer science';
 
 export interface SubjectItem {
   name: string;
@@ -20,17 +16,20 @@ export interface IntermediateGroup {
   shortTitle: string;
   qualification: "F.Sc (Pre-Medical)" | "F.Sc (Pre-Engineering)" | "ICS (Computer Science)";
   duration: "2 Years (Part-I & Part-II / HSSC)";
+  class11Seats: number; // Applies to Class 11 only. Same count open to boys & girls
+  monthlyTuitionFee: {
+    civilian: number;
+    forces: number; // Armed forces dependents (Navy, Army, Air Force)
+  };
+  admissionFee: number;
+  scienceLabFee: number;
+  description: string;
+  image: string;
   eligibility: {
     minMatricMarksPercentage: number;
     requiredMatricSubjects: string[];
     details: string;
   };
-  seats: number;
-  monthlyTuitionFee: number;
-  admissionFee: number;
-  scienceLabFee: number;
-  description: string;
-  image: string;
   subjectsPart1: SubjectItem[];
   subjectsPart2: SubjectItem[];
   careerOpportunities: {
@@ -38,24 +37,28 @@ export interface IntermediateGroup {
     description: string;
     targetUniversities: string[];
   }[];
-  weeklyTimetableSample: {
-    period: string;
-    time: string;
-    subject: string;
-    type: "Lecture" | "Practical Lab" | "Tutorial / Test";
-  }[];
 }
 
 export interface NoticeItem {
   id: string;
   title: string;
-  category: "Date Sheet" | "Roll No Slip" | "Merit List" | "Holidays" | "Fee Due Date" | "General Notice";
+  category: "Date Sheet" | "Roll No Slip" | "Holiday" | "Fee Due Date" | "General Notice";
   date: string;
   description: string;
-  fileDownloadUrl?: string;
-  fileSize?: string;
-  isPinned?: boolean;
-  isUrgent?: boolean;
+  file_url?: string;
+  file_size?: string;
+  is_pinned?: boolean;
+  is_urgent?: boolean;
+  created_by?: string;
+}
+
+export interface AnnouncementItem {
+  id: string;
+  heading: string;
+  image_url: string;
+  description: string;
+  date: string;
+  created_by?: string;
 }
 
 export interface PositionHolder {
@@ -74,20 +77,6 @@ export interface PositionHolder {
   currentInstitution: string;
 }
 
-export interface Alumnus {
-  id: string;
-  name: string;
-  graduationYear: number;
-  program: string;
-  currentRole: string;
-  institutionOrCompany: string;
-  location: string;
-  quote: string;
-  story: string;
-  image: string;
-  verifiedBadge?: string;
-}
-
 export interface FacilityItem {
   id: string;
   name: string;
@@ -98,42 +87,19 @@ export interface FacilityItem {
   inCharge?: string;
 }
 
-export interface Lecturer {
+export interface StaffMember {
   id: string;
   name: string;
-  subject: string;
-  designation: "Head of Department & Senior Lecturer" | "Senior Lecturer" | "Lecturer" | "Lecturer & Lab In-Charge" | "Senior Lecturer & College Khatib" | "Lab Demonstrator";
+  role: "Principal" | "Vice Principal" | "Subject Teacher" | "Lab Teacher" | "PTI";
+  subject?: string; // for Subject Teacher / Lab Teacher
+  labType?: "Physics" | "Chemistry" | "Biology" | "Library"; // only for Lab Teacher
   qualification: string;
-  experienceYears: number;
-  image: string;
-  subjectsTaught: string[];
-  department: string;
-}
-
-export interface MeritListEntry {
-  listNumber: "1st Merit List" | "2nd Merit List" | "3rd Merit List";
-  group: string;
-  closingMatricMarks: number;
-  closingPercentage: number;
-  announcementDate: string;
-  feeDeadline: string;
-  pdfUrl?: string;
-}
-
-export interface FeeItem {
-  groupName: string;
-  admissionFee: number;
-  monthlyTuitionFee: number;
-  scienceLabMonthlyFee: number;
-  prospectusAndRegistrationFee: number;
-  annualExaminationFee: number;
-}
-
-export interface FAQItem {
-  id: string;
-  category: string;
-  question: string;
-  answer: string;
+  classesTaught: {
+    group: "Pre-Medical" | "Pre-Engineering" | "Computer Science";
+    classLevel: "11th" | "12th";
+    section?: string;
+  }[]; // supports one teacher teaching multiple classes/sections
+  image?: string;
 }
 
 export interface GalleryItem {
@@ -147,56 +113,61 @@ export interface GalleryItem {
   date: string;
 }
 
-export interface NewsArticle {
+export interface FAQItem {
   id: string;
-  slug: string;
-  title: string;
-  summary: string;
   category: string;
-  publishedAt: string;
-  readTime: string;
-  featured?: boolean;
-  coverImage: string;
-  author: { name: string; role: string; avatar: string };
-  content: string[];
-  tags: string[];
+  question: string;
+  answer: string;
 }
 
-export interface CampusEvent {
-  id: string;
-  slug: string;
-  title: string;
-  description: string;
-  fullDetails: string;
-  category: string;
-  date: string;
-  time: string;
-  venue: string;
-  coverImage: string;
-  rsvpOpen?: boolean;
-  totalSeats: number;
-  registeredSeats: number;
-  speaker?: { name: string; title: string; organization: string };
+export interface FeeStructureItem {
+  groupName: string;
+  admissionFee: number;
+  monthlyTuitionCivilian: number;
+  monthlyTuitionForces: number;
+  scienceLabMonthlyFee: number;
+  prospectusAndRegistrationFee: number;
 }
 
-export interface Program {
-  id: string;
-  slug: string;
-  title: string;
-  shortTitle: string;
-  category: ProgramCategory;
-  department: string;
-  degreeLevel: string;
-  badge?: string;
-  description: string;
-  duration: string;
-  seats: number;
-  feePerSemester: number;
-  image: string;
-  eligibility: string[];
-  learningOutcomes: string[];
-  curriculum: { semester: string; courses: { code: string; name: string; creditHours: number; isLab?: boolean }[] }[];
-  labFacilities: string[];
-  careerOpportunities: string[];
-  facultyLead: { name: string; designation: string; qualification: string; image: string };
+export type PortalUserRole = "admin" | "student" | "teacher" | "parent";
+
+export interface StudentProfile {
+  id: string; // College ID e.g. "BCH-2026-0101"
+  name: string;
+  fatherName: string;
+  group: "Pre-Medical" | "Pre-Engineering" | "Computer Science";
+  classLevel: "11th" | "12th";
+  section: "Section A" | "Section B" | "Section C";
+  category: "Civilian" | "Armed Forces";
+  feeStatus: "Paid" | "Unpaid";
+  dueAmount: number;
+  timetable: {
+    day: string;
+    periods: { time: string; subject: string; teacher: string; room: string }[];
+  }[];
+  internalExamResults: {
+    examName: "1st Term Assessment" | "Mid-Term Send-Up" | "Pre-Board Mock";
+    examDate: string;
+    subjects: { name: string; totalMarks: number; obtainedMarks: number; grade: string }[];
+    totalObtained: number;
+    totalMax: number;
+    percentage: number;
+  }[];
+  attendancePercentage: number;
+  ptmTiming?: string;
+}
+
+export interface TeacherProfile {
+  id: string; // Teacher ID e.g. "TCH-004"
+  name: string;
+  subject: string;
+  classesTaught: {
+    group: "Pre-Medical" | "Pre-Engineering" | "Computer Science";
+    classLevel: "11th" | "12th";
+    section: string;
+  }[];
+  timetable: {
+    day: string;
+    periods: { time: string; class: string; subject: string; room: string }[];
+  }[];
 }

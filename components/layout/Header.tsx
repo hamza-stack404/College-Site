@@ -49,9 +49,11 @@ export const Header: React.FC = () => {
     { label: "Groups Offered", href: "/groups", hasMegaMenu: true },
     { label: "Admissions", href: "/admissions" },
     { label: "Notice Board", href: "/notice-board", isBadge: true },
+    { label: "Announcements", href: "/announcements" },
     { label: "Results", href: "/results" },
     { label: "Facilities", href: "/facilities" },
     { label: "Faculty", href: "/faculty" },
+    { label: "Alumni", href: "/alumni" },
     { label: "Gallery", href: "/gallery" },
     { label: "Contact", href: "/contact" },
   ];
