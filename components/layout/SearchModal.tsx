@@ -3,7 +3,22 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, X, BookOpen, User, Calendar, Newspaper, ArrowRight, FileText, Award, Microscope } from "lucide-react";
+import {
+  Search,
+  X,
+  BookOpen,
+  User,
+  Calendar,
+  Newspaper,
+  ArrowRight,
+  FileText,
+  Award,
+  Microscope,
+  Calculator,
+  QrCode,
+  Shield,
+  Sparkles,
+} from "lucide-react";
 import { intermediateGroupsData } from "@/lib/data/groups";
 import { initialNoticesData } from "@/lib/data/notices";
 import { positionHoldersData } from "@/lib/data/results";
@@ -21,10 +36,6 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        if (isOpen) onClose();
-      }
       if (e.key === "Escape" && isOpen) {
         onClose();
       }
@@ -38,9 +49,14 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
     if (!q) return null;
 
     const matchedGroups = intermediateGroupsData
-      .filter((g) => g.title.toLowerCase().includes(q) || g.shortTitle.toLowerCase().includes(q) || g.description.toLowerCase().includes(q))
+      .filter(
+        (g) =>
+          g.title.toLowerCase().includes(q) ||
+          g.shortTitle.toLowerCase().includes(q) ||
+          g.description.toLowerCase().includes(q)
+      )
       .map((g) => ({
-        type: "Group",
+        type: "Academic Group",
         title: g.title,
         subtitle: `${g.qualification} • ${g.duration}`,
         href: `/groups/${g.slug}`,
@@ -48,9 +64,14 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
       }));
 
     const matchedNotices = initialNoticesData
-      .filter((n) => n.title.toLowerCase().includes(q) || n.description.toLowerCase().includes(q) || n.category.toLowerCase().includes(q))
+      .filter(
+        (n) =>
+          n.title.toLowerCase().includes(q) ||
+          n.description.toLowerCase().includes(q) ||
+          n.category.toLowerCase().includes(q)
+      )
       .map((n) => ({
-        type: "Notice",
+        type: "Notice Circular",
         title: n.title,
         subtitle: `${n.category} • ${n.date}`,
         href: `/notice-board`,
@@ -58,7 +79,12 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
       }));
 
     const matchedPositions = positionHoldersData
-      .filter((p) => p.name.toLowerCase().includes(q) || p.group.toLowerCase().includes(q) || p.boardRank.toLowerCase().includes(q))
+      .filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          p.group.toLowerCase().includes(q) ||
+          p.boardRank.toLowerCase().includes(q)
+      )
       .map((p) => ({
         type: "Position Holder",
         title: `${p.name} (${p.boardRank})`,
@@ -68,9 +94,14 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
       }));
 
     const matchedFaculty = facultyData
-      .filter((f) => f.name.toLowerCase().includes(q) || (f.subject && f.subject.toLowerCase().includes(q)) || f.qualification.toLowerCase().includes(q))
+      .filter(
+        (f) =>
+          f.name.toLowerCase().includes(q) ||
+          (f.subject && f.subject.toLowerCase().includes(q)) ||
+          f.qualification.toLowerCase().includes(q)
+      )
       .map((f) => ({
-        type: "Staff / Teacher",
+        type: "Faculty Member",
         title: f.name,
         subtitle: `${f.role} ${f.subject ? `— ${f.subject}` : ""}`,
         href: `/faculty`,
@@ -78,16 +109,26 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
       }));
 
     const matchedFacilities = facilitiesData
-      .filter((fac) => fac.name.toLowerCase().includes(q) || fac.description.toLowerCase().includes(q))
+      .filter(
+        (fac) =>
+          fac.name.toLowerCase().includes(q) ||
+          fac.description.toLowerCase().includes(q)
+      )
       .map((fac) => ({
-        type: "Facility",
+        type: "Campus Facility",
         title: fac.name,
         subtitle: fac.category,
         href: `/facilities`,
         icon: Microscope,
       }));
 
-    return [...matchedGroups, ...matchedNotices, ...matchedPositions, ...matchedFaculty, ...matchedFacilities];
+    return [
+      ...matchedGroups,
+      ...matchedNotices,
+      ...matchedPositions,
+      ...matchedFaculty,
+      ...matchedFacilities,
+    ];
   }, [query]);
 
   const handleSelect = (href: string) => {
@@ -123,7 +164,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search groups, merit lists, date sheets, faculty, labs..."
+              placeholder="Search groups, merit lists, date sheets, faculty, labs, fee challan..."
               autoFocus
               className="w-full bg-transparent text-sm sm:text-base text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none"
             />
@@ -179,27 +220,57 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
               </div>
             ) : query && searchResults && searchResults.length === 0 ? (
               <div className="py-12 text-center text-slate-500 dark:text-slate-400 text-sm">
-                No results found for &ldquo;{query}&rdquo;. Try searching for &ldquo;Pre-Medical&rdquo;, &ldquo;Merit List&rdquo;, &ldquo;Date Sheet&rdquo;, &ldquo;Physics Lab&rdquo;, or &ldquo;Biology&rdquo;.
+                No results found for &ldquo;{query}&rdquo;. Try searching for &ldquo;Pre-Medical&rdquo;, &ldquo;Merit Calculator&rdquo;, &ldquo;Date Sheet&rdquo;, &ldquo;Portal&rdquo;, or &ldquo;Biology&rdquo;.
               </div>
             ) : (
               /* Quick Links when query is empty */
               <div className="space-y-4 py-2">
                 <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-3">
-                  Quick Links
+                  Quick Navigation & Utilities
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    onClick={() => handleSelect("/portal")}
+                    className="p-3 rounded-2xl flex items-center gap-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
+                  >
+                    <div className="p-2 rounded-xl bg-gold-50 dark:bg-gold-950 text-gold-600 dark:text-gold-400">
+                      <Shield className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white">
+                        Student / Parent Portal
+                      </div>
+                      <div className="text-[11px] text-slate-500">Challans, results & timetable</div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => handleSelect("/admissions")}
+                    className="p-3 rounded-2xl flex items-center gap-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
+                  >
+                    <div className="p-2 rounded-xl bg-medical-50 dark:bg-medical-950 text-medical-600 dark:text-medical-400">
+                      <Calculator className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white">
+                        Admissions & Merit Calculator
+                      </div>
+                      <div className="text-[11px] text-slate-500">Check FBISE eligibility & apply</div>
+                    </div>
+                  </button>
+
                   <button
                     onClick={() => handleSelect("/notice-board")}
                     className="p-3 rounded-2xl flex items-center gap-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
                   >
-                    <div className="p-2 rounded-xl bg-gold-50 dark:bg-gold-950 text-gold-600 dark:text-gold-400">
+                    <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400">
                       <FileText className="w-4 h-4" />
                     </div>
                     <div>
                       <div className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white">
-                        Notice Board & Merit Lists
+                        Official Notice Board
                       </div>
-                      <div className="text-[11px] text-slate-500">Date sheets & admissions</div>
+                      <div className="text-[11px] text-slate-500">Date sheets & circulars</div>
                     </div>
                   </button>
 
@@ -207,44 +278,14 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
                     onClick={() => handleSelect("/results")}
                     className="p-3 rounded-2xl flex items-center gap-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
                   >
-                    <div className="p-2 rounded-xl bg-medical-50 dark:bg-medical-950 text-medical-600 dark:text-medical-400">
+                    <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400">
                       <Award className="w-4 h-4" />
                     </div>
                     <div>
                       <div className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white">
-                        BISE Board Results
+                        FBISE Board Gazette
                       </div>
-                      <div className="text-[11px] text-slate-500">Position holders & mark check</div>
-                    </div>
-                  </button>
-
-                  <button
-                    onClick={() => handleSelect("/groups/pre-medical")}
-                    className="p-3 rounded-2xl flex items-center gap-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
-                  >
-                    <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400">
-                      <BookOpen className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white">
-                        F.Sc Pre-Medical
-                      </div>
-                      <div className="text-[11px] text-slate-500">Biology, Chemistry, Physics</div>
-                    </div>
-                  </button>
-
-                  <button
-                    onClick={() => handleSelect("/facilities")}
-                    className="p-3 rounded-2xl flex items-center gap-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
-                  >
-                    <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400">
-                      <Microscope className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white">
-                        Campus Facilities
-                      </div>
-                      <div className="text-[11px] text-slate-500">Mosque, Labs, Library & Vans</div>
+                      <div className="text-[11px] text-slate-500">Position holders & results</div>
                     </div>
                   </button>
                 </div>

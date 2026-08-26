@@ -1,12 +1,14 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { PageHero } from "@/components/shared/PageHero";
 import { SectionHeader } from "@/components/shared/SectionHeader";
 import { Accordion } from "@/components/ui/Accordion";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { MeritCalculator } from "@/components/tools/MeritCalculator";
+import { FeeChallanGenerator } from "@/components/tools/FeeChallanGenerator";
 import {
   feeStructureData,
   requiredDocumentsList,
@@ -14,8 +16,9 @@ import {
   faqsData,
   admissionStatusNotice,
 } from "@/lib/data/admissions";
-import { COLLEGE_INFO, FEE_TIERS } from "@/lib/data/constants";
+import { COLLEGE_INFO } from "@/lib/data/constants";
 import { formatCurrency } from "@/lib/utils";
+import { submitAdmissionApplicationAction } from "@/lib/supabase/actions";
 import {
   FileText,
   FileDown,
@@ -25,10 +28,68 @@ import {
   HelpCircle,
   AlertCircle,
   Layers,
-  PhoneCall,
+  Send,
+  Sparkles,
 } from "lucide-react";
 
 export default function AdmissionsPage() {
+  const [showFeeGenerator, setShowFeeGenerator] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitResult, setSubmitResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Online Application form state
+  const [formData, setFormData] = useState({
+    applicant_name: "",
+    father_name: "",
+    father_service_category: "Civilian" as const,
+    b_form_number: "",
+    selected_discipline: "Pre-Medical" as const,
+    matric_total_marks: 1100,
+    matric_obtained_marks: 950,
+    contact_phone: "",
+    contact_email: "",
+  });
+
+  const handleSubmitApplication = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setSubmitResult(null);
+
+    try {
+      const res = await submitAdmissionApplicationAction({
+        ...formData,
+        matric_total_marks: Number(formData.matric_total_marks),
+        matric_obtained_marks: Number(formData.matric_obtained_marks),
+      });
+
+      setSubmitResult({
+        success: res.success,
+        message: res.message,
+      });
+
+      if (res.success) {
+        setFormData({
+          applicant_name: "",
+          father_name: "",
+          father_service_category: "Civilian",
+          b_form_number: "",
+          selected_discipline: "Pre-Medical",
+          matric_total_marks: 1100,
+          matric_obtained_marks: 950,
+          contact_phone: "",
+          contact_email: "",
+        });
+      }
+    } catch (err: any) {
+      setSubmitResult({
+        success: false,
+        message: err.message || "Failed to submit application.",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const downloadableForms = [
     { title: "College Admission Application Form (Printable)", size: "1.2 MB", format: "PDF" },
     { title: "Student Medical Fitness Certificate Form", size: "650 KB", format: "PDF" },
@@ -77,7 +138,199 @@ export default function AdmissionsPage() {
         </div>
       </section>
 
-      {/* 2. Step-by-Step Admission Process */}
+      {/* 2. Interactive Merit Calculator */}
+      <section className="py-20 bg-slate-50 dark:bg-slate-950">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+          <SectionHeader
+            badge="Eligibility Check"
+            badgeVariant="gold"
+            title="Calculate Your"
+            titleHighlight="FBISE Admission Aggregate"
+            subtitle="Verify if your Matric scores satisfy minimum department cutoffs for Class 11."
+            align="center"
+          />
+
+          <MeritCalculator />
+        </div>
+      </section>
+
+      {/* 3. Online Admission Form (Connected to Supabase) */}
+      <section className="py-20 bg-white dark:bg-slate-900/50 border-y border-slate-200 dark:border-slate-800" id="apply-online">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+          <SectionHeader
+            badge="Direct Enrollment"
+            badgeVariant="medical"
+            title="Online Admission Application"
+            titleHighlight="Intake Session 2026–2027"
+            subtitle="Submit your initial registration details for document verification and merit list ranking."
+            align="center"
+          />
+
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-xl space-y-6">
+            {submitResult && (
+              <div
+                className={`p-4 rounded-2xl border flex items-center gap-3 text-xs sm:text-sm ${
+                  submitResult.success
+                    ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 text-emerald-900 dark:text-emerald-200"
+                    : "bg-rose-50 dark:bg-rose-950/40 border-rose-300 text-rose-900 dark:text-rose-200"
+                }`}
+              >
+                {submitResult.success ? (
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                ) : (
+                  <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0" />
+                )}
+                <div>{submitResult.message}</div>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmitApplication} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Student Full Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Muhammad Ali"
+                    value={formData.applicant_name}
+                    onChange={(e) => setFormData({ ...formData, applicant_name: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Father&apos;s / Guardian&apos;s Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Tariq Mahmood"
+                    value={formData.father_name}
+                    onChange={(e) => setFormData({ ...formData, father_name: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Applicant B-Form / CNIC *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="42201-1234567-1"
+                    value={formData.b_form_number}
+                    onChange={(e) => setFormData({ ...formData, b_form_number: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Category Quota *
+                  </label>
+                  <select
+                    value={formData.father_service_category}
+                    onChange={(e) => setFormData({ ...formData, father_service_category: e.target.value as any })}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm"
+                  >
+                    <option value="Civilian">Civilian (Open Merit)</option>
+                    <option value="Navy">Pakistan Navy Dependent</option>
+                    <option value="Army">Pakistan Army Dependent</option>
+                    <option value="Air Force">Pakistan Air Force Dependent</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Applied Discipline *
+                  </label>
+                  <select
+                    value={formData.selected_discipline}
+                    onChange={(e) => setFormData({ ...formData, selected_discipline: e.target.value as any })}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm"
+                  >
+                    <option value="Pre-Medical">F.Sc Pre-Medical</option>
+                    <option value="Pre-Engineering">F.Sc Pre-Engineering</option>
+                    <option value="Computer Science">ICS Computer Science</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Matric Total Marks *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    value={formData.matric_total_marks}
+                    onChange={(e) => setFormData({ ...formData, matric_total_marks: Number(e.target.value) })}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Obtained Marks *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    value={formData.matric_obtained_marks}
+                    onChange={(e) => setFormData({ ...formData, matric_obtained_marks: Number(e.target.value) })}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Contact Phone (WhatsApp) *
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="0300-1234567"
+                    value={formData.contact_phone}
+                    onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="student@example.com"
+                    value={formData.contact_email}
+                    onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <Button type="submit" variant="gold" size="md" className="w-full justify-center gap-2" disabled={isSubmitting}>
+                  <Send className="w-4 h-4" />
+                  <span>{isSubmitting ? "Submitting to Supabase..." : "Submit Online Application"}</span>
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      {/* 4. Step-by-Step Admission Process */}
       <section className="py-20 bg-slate-50 dark:bg-slate-950">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <SectionHeader
@@ -112,9 +365,9 @@ export default function AdmissionsPage() {
         </div>
       </section>
 
-      {/* 3. Fee Structure Range & Policy */}
+      {/* 5. Fee Structure Range & Policy */}
       <section className="py-20 bg-white dark:bg-slate-900/40 border-y border-slate-200 dark:border-slate-800" id="fee-structure">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
           <SectionHeader
             badge="Fee Schedule"
             badgeVariant="gold"
@@ -163,14 +416,28 @@ export default function AdmissionsPage() {
               </table>
             </div>
 
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/60 border-t border-slate-100 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400">
-              * Note: Enrolled students and parents can view, track, and download official monthly fee challan slips directly via their Student Portal login.
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/60 border-t border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
+              <span>* Note: Official monthly fee challan slips can be generated and printed below.</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowFeeGenerator(!showFeeGenerator)}
+                className="text-xs"
+              >
+                {showFeeGenerator ? "Hide Challan Generator" : "Open 3-Part Challan Preview"}
+              </Button>
             </div>
           </div>
+
+          {showFeeGenerator && (
+            <div className="max-w-4xl mx-auto pt-6">
+              <FeeChallanGenerator />
+            </div>
+          )}
         </div>
       </section>
 
-      {/* 4. Required Documents Checklist */}
+      {/* 6. Required Documents Checklist */}
       <section className="py-20 bg-slate-50 dark:bg-slate-950">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
           <SectionHeader
@@ -200,7 +467,7 @@ export default function AdmissionsPage() {
         </div>
       </section>
 
-      {/* 5. Downloadable Forms */}
+      {/* 7. Downloadable Forms */}
       <section className="py-20 bg-white dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
           <SectionHeader
@@ -245,7 +512,7 @@ export default function AdmissionsPage() {
         </div>
       </section>
 
-      {/* 6. FAQ Accordion */}
+      {/* 8. FAQ Accordion */}
       <section className="py-20 bg-slate-50 dark:bg-slate-950">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
           <SectionHeader

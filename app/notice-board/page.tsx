@@ -47,6 +47,23 @@ export default function NoticeBoardPage() {
       }
     }
     fetchNotices();
+
+    if (isSupabaseConfigured) {
+      const channel = supabase
+        .channel("realtime-notices")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "notices" },
+          () => {
+            fetchNotices();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
   }, []);
 
   const categories = [

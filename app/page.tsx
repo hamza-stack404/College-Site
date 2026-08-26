@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
@@ -24,17 +24,45 @@ import {
   ChevronRight,
   PhoneCall,
   Megaphone,
+  Microscope,
+  Compass,
 } from "lucide-react";
 import { SectionHeader } from "@/components/shared/SectionHeader";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { MeritCalculator } from "@/components/tools/MeritCalculator";
 import { intermediateGroupsData } from "@/lib/data/groups";
 import { initialNoticesData } from "@/lib/data/notices";
 import { initialAnnouncementsData } from "@/lib/data/announcements";
 import { facilitiesData } from "@/lib/data/facilities";
 import { COLLEGE_INFO } from "@/lib/data/constants";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";
 
 export default function HomePage() {
+  const [liveNotice, setLiveNotice] = useState(initialNoticesData[0]);
+
+  useEffect(() => {
+    async function fetchTopNotice() {
+      if (!isSupabaseConfigured) return;
+      try {
+        const { data, error } = await supabase
+          .from("notices")
+          .select("*")
+          .order("is_pinned", { ascending: false })
+          .order("date", { ascending: false })
+          .limit(1)
+          .single();
+
+        if (data && !error) {
+          setLiveNotice(data as any);
+        }
+      } catch (err) {
+        // Fallback to initialNotice
+      }
+    }
+    fetchTopNotice();
+  }, []);
+
   const groupIcons = {
     "pre-medical": Stethoscope,
     "pre-engineering": Calculator,
@@ -42,17 +70,21 @@ export default function HomePage() {
   };
 
   const quickStats = [
-    { label: "FBISE Affiliation", value: "Federal Board", detail: "Registered & approved HSSC examination center" },
-    { label: "Class 11 Intake", value: "350 Total Seats", detail: "50 Pre-Med, 100 Pre-Eng, 200 Computer Science" },
-    { label: "Specialized Science Labs", value: "4 Laboratories", detail: "Dedicated Physics, Chemistry, Biology & IT facilities" },
-    { label: "Pioneer Batch", value: "Class 11", detail: "Our current cohort setting the standard for future alumni" },
+    { label: "FBISE Islamabad Affiliation", value: "Federal Board", detail: "Registered & approved HSSC examination center" },
+    { label: "Class 11 Intake Capacity", value: "350 Total Seats", detail: "50 Pre-Med, 100 Pre-Eng, 200 ICS Computer Science" },
+    { label: "Specialized Science Labs", value: "4 Certified Labs", detail: "Physics, Chemistry, Biology & High-Performance IT" },
+    { label: "Pioneer Scholar Cohort", value: "Class 11", detail: "Setting the benchmark standard for collegiate excellence" },
   ];
 
   return (
     <div className="flex flex-col min-h-screen">
       {/* 1. Hero Section */}
-      <section className="relative min-h-[85vh] flex items-center justify-center pt-32 pb-20 overflow-hidden bg-navy-950 text-white">
-        {/* Background Image */}
+      <section className="relative min-h-[90vh] flex items-center justify-center pt-32 pb-24 overflow-hidden bg-navy-950 text-white">
+        {/* Ambient Glows */}
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-medical-500/15 rounded-full blur-[140px] pointer-events-none" />
+        <div className="absolute bottom-10 right-10 w-[400px] h-[400px] bg-gold-500/10 rounded-full blur-[120px] pointer-events-none" />
+
+        {/* Background Image with Mesh Layer */}
         <div className="absolute inset-0 z-0">
           <Image
             src="https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=2000&q=80"
@@ -61,7 +93,8 @@ export default function HomePage() {
             priority
             className="object-cover opacity-20 filter brightness-90"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-navy-950 via-navy-950/80 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-navy-950 via-navy-950/80 to-navy-950/40" />
+          <div className="absolute inset-0 bg-noise opacity-40" />
         </div>
 
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-8">
@@ -73,7 +106,7 @@ export default function HomePage() {
             className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-gold-500/40 text-gold-300 text-xs sm:text-sm font-semibold shadow-xl"
           >
             <ShieldCheck className="w-4 h-4 text-gold-400" />
-            <span>Affiliated with the Federal Board of Intermediate and Secondary Education (FBISE) Islamabad</span>
+            <span>Affiliated with Federal Board of Intermediate & Secondary Education (FBISE) Islamabad</span>
           </motion.div>
 
           {/* Main Headline */}
@@ -83,14 +116,14 @@ export default function HomePage() {
             transition={{ duration: 0.6, delay: 0.1 }}
             className="space-y-4 max-w-4xl mx-auto"
           >
-            <h1 className="font-display font-black text-3xl sm:text-5xl lg:text-6xl text-white tracking-tight leading-tight">
-              A Tradition of Discipline & <br />
+            <h1 className="font-display font-black text-3xl sm:text-5xl lg:text-7xl text-white tracking-tight leading-[1.1]">
+              A Legacy of Discipline & <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-gold-300 via-gold-400 to-amber-200">
-                Academic Excellence in Science & IT
+                Academic Brilliance in Science & IT
               </span>
             </h1>
-            <p className="text-base sm:text-lg text-slate-300 max-w-2xl mx-auto leading-relaxed">
-              Bahria College Hanif provides structured Higher Secondary School Certificate (HSSC) education in **Pre-Medical**, **Pre-Engineering**, and **Computer Science (ICS)** under experienced subject teachers.
+            <p className="text-base sm:text-lg text-slate-300 max-w-2xl mx-auto leading-relaxed font-sans">
+              Bahria College Hanif offers rigorous Higher Secondary School Certificate (HSSC) education in <strong>Pre-Medical</strong>, <strong>Pre-Engineering</strong>, and <strong>Computer Science (ICS)</strong> with state-of-the-art diagnostic laboratories and MDCAT/ECAT guidance.
             </p>
           </motion.div>
 
@@ -103,13 +136,13 @@ export default function HomePage() {
           >
             <Link href="/groups">
               <Button size="lg" variant="gold" rightIcon={<ArrowRight className="w-4 h-4" />}>
-                Explore Groups Offered
+                Explore Academic Groups
               </Button>
             </Link>
             <Link href="/notice-board">
               <Button size="lg" variant="outline" className="text-white border-white/30 hover:bg-white/10">
                 <BellRing className="w-4 h-4 mr-2 text-gold-400" />
-                College Notice Board
+                Notice Board & Circulars
               </Button>
             </Link>
             <Link href="/portal">
@@ -120,22 +153,22 @@ export default function HomePage() {
             </Link>
           </motion.div>
 
-          {/* Quick Stats Grid */}
+          {/* Quick Stats Bento */}
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.3 }}
-            className="grid grid-cols-2 lg:grid-cols-4 gap-4 pt-6 max-w-5xl mx-auto text-left"
+            className="grid grid-cols-2 lg:grid-cols-4 gap-4 pt-8 max-w-5xl mx-auto text-left"
           >
             {quickStats.map((stat, idx) => (
               <div
                 key={idx}
-                className="p-5 rounded-2xl bg-white/5 backdrop-blur-md border border-white/10 hover:border-gold-500/40 transition-colors"
+                className="p-5 rounded-3xl bg-white/5 backdrop-blur-md border border-white/10 hover:border-gold-500/50 hover:bg-white/10 transition-all shadow-lg"
               >
                 <div className="font-display font-black text-xl sm:text-2xl text-gold-400">
                   {stat.value}
                 </div>
-                <div className="font-semibold text-xs sm:text-sm text-white mt-1">
+                <div className="font-bold text-xs sm:text-sm text-white mt-1">
                   {stat.label}
                 </div>
                 <div className="text-[11px] text-slate-400 mt-1 leading-snug">
@@ -147,16 +180,16 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 2. Notice Board Alert Strip */}
-      <section className="bg-gold-500 text-navy-950 py-3 px-4 sm:px-8 font-medium text-xs sm:text-sm shadow-md">
+      {/* 2. Realtime Notice Board Alert Strip */}
+      <section className="bg-gold-500 text-navy-950 py-3.5 px-4 sm:px-8 font-medium text-xs sm:text-sm shadow-md">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-2 font-bold">
-            <span className="p-1 rounded-md bg-navy-950 text-gold-400 flex items-center justify-center">
+          <div className="flex items-center gap-2 font-bold min-w-0">
+            <span className="p-1.5 rounded-lg bg-navy-950 text-gold-400 flex items-center justify-center flex-shrink-0">
               <BellRing className="w-3.5 h-3.5" />
             </span>
-            <span className="uppercase tracking-wider text-xs">Official Circular:</span>
-            <span className="font-normal truncate max-w-xl">
-              {initialNoticesData[0].title}
+            <span className="uppercase tracking-wider text-xs flex-shrink-0">Official Circular:</span>
+            <span className="font-semibold truncate max-w-xl">
+              {liveNotice.title}
             </span>
           </div>
 
@@ -207,7 +240,7 @@ export default function HomePage() {
               <h2 className="font-display font-black text-2xl sm:text-4xl text-slate-900 dark:text-white leading-tight">
                 &ldquo;Where Disciplined Character Meets Academic Brilliance.&rdquo;
               </h2>
-              <div className="space-y-4 text-sm sm:text-base text-slate-600 dark:text-slate-300 leading-relaxed">
+              <div className="space-y-4 text-sm sm:text-base text-slate-600 dark:text-slate-300 leading-relaxed font-sans">
                 <p>
                   Assalam-o-Alaikum and Welcome to Bahria College Hanif. The intermediate years (HSSC Part-I & Part-II) represent the crucial transition in a student&apos;s educational journey, laying the groundwork for higher studies in medicine, engineering, and technology.
                 </p>
@@ -254,11 +287,11 @@ export default function HomePage() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {intermediateGroupsData.map((group) => {
-              const Icon = groupIcons[group.slug] || BookOpen;
+              const Icon = groupIcons[group.slug as keyof typeof groupIcons] || BookOpen;
               return (
                 <div
                   key={group.id}
-                  className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between overflow-hidden group"
+                  className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-2xl transition-all duration-300 flex flex-col justify-between overflow-hidden group"
                 >
                   <div className="relative h-56 w-full overflow-hidden">
                     <Image
@@ -319,8 +352,24 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 5. Campus Facilities Overview */}
+      {/* 5. Embedded Merit & Aggregate Calculator Section */}
       <section className="py-20 bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+          <SectionHeader
+            badge="Admissions 2026 Evaluation"
+            badgeVariant="gold"
+            title="Calculate Your"
+            titleHighlight="FBISE Admission Merit"
+            subtitle="Input your Matric marks to verify eligibility for Pre-Medical, Pre-Engineering, or ICS Computer Science."
+            align="center"
+          />
+
+          <MeritCalculator />
+        </div>
+      </section>
+
+      {/* 6. Campus Facilities Overview */}
+      <section className="py-20 bg-slate-50 dark:bg-slate-900/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
           <SectionHeader
             badge="Campus Environment"
@@ -335,7 +384,7 @@ export default function HomePage() {
             {facilitiesData.slice(0, 6).map((fac) => (
               <div
                 key={fac.id}
-                className="bg-slate-50 dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col"
+                className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm hover:shadow-xl transition-all flex flex-col"
               >
                 <div className="relative h-48 w-full">
                   <Image
@@ -377,8 +426,8 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 6. Recent Announcements Section */}
-      <section className="py-20 bg-slate-50 dark:bg-slate-900/50">
+      {/* 7. Recent Announcements Section */}
+      <section className="py-20 bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
           <SectionHeader
             badge="Campus Life"
@@ -393,7 +442,7 @@ export default function HomePage() {
             {initialAnnouncementsData.map((item) => (
               <div
                 key={item.id}
-                className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm flex flex-col justify-between"
+                className="bg-slate-50 dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm flex flex-col justify-between"
               >
                 <div className="relative h-48 w-full">
                   <Image
