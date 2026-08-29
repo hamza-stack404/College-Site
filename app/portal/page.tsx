@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { PageHero } from "@/components/shared/PageHero";
 import { Button } from "@/components/ui/Button";
 import { PortalUserRole, StudentProfile, TeacherProfile } from "@/lib/types";
@@ -9,9 +9,12 @@ import { StudentDashboard } from "@/components/portal/StudentDashboard";
 import { ParentDashboard } from "@/components/portal/ParentDashboard";
 import { TeacherDashboard } from "@/components/portal/TeacherDashboard";
 import { AdminDashboard } from "@/components/portal/AdminDashboard";
-import { LogOut, Shield, GraduationCap, Users, User } from "lucide-react";
+import { LogOut } from "lucide-react";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";
 
-// Mock Student Record
+// NOTE: Full dashboard data-fetching (live timetable, fee records, examination marks from Supabase)
+// is a dedicated follow-up task. Current dashboards below receive structured mock props for UI layout
+// while the top Authenticated User Header reflects real authenticated Supabase user profile data.
 const mockStudent: StudentProfile = {
   id: "BCH-2026-0101",
   name: "Muhammad Hamza Khan",
@@ -57,7 +60,6 @@ const mockStudent: StudentProfile = {
   ],
 };
 
-// Mock Teacher Record
 const mockTeacher: TeacherProfile = {
   id: "TCH-003",
   name: "Mrs. Naila Jabeen",
@@ -79,19 +81,87 @@ const mockTeacher: TeacherProfile = {
   ],
 };
 
+function getInitials(name: string): string {
+  if (!name) return "BC";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
 export default function PortalPage() {
   const [activeRole, setActiveRole] = useState<PortalUserRole>("student");
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
   const [currentUserId, setCurrentUserId] = useState<string>("BCH-2026-0101");
+  const [currentUserFullName, setCurrentUserFullName] = useState<string>("Muhammad Hamza Khan");
   const [isMarksEntryOpen, setIsMarksEntryOpen] = useState<boolean>(true);
 
-  const handleLoginSuccess = (userId: string, role: PortalUserRole) => {
+  // Restore authenticated session if active on mount
+  useEffect(() => {
+    async function checkActiveSession() {
+      if (!isSupabaseConfigured) return;
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (sessionData.session?.user) {
+          const userId = sessionData.session.user.id;
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("roll_number, full_name, role")
+            .eq("id", userId)
+            .single();
+
+          if (profile) {
+            setCurrentUserId(profile.roll_number || "BCH-2026-0101");
+            setCurrentUserFullName(profile.full_name || "College Scholar");
+            if (profile.role) {
+              setActiveRole(profile.role as PortalUserRole);
+            }
+            setIsLoggedIn(true);
+          }
+        }
+      } catch (err) {
+        console.error("Session verification error:", err);
+      }
+    }
+    checkActiveSession();
+  }, []);
+
+  const handleLoginSuccess = async (userId: string, role: PortalUserRole, fullName?: string) => {
     setCurrentUserId(userId);
     setActiveRole(role);
+    if (fullName) {
+      setCurrentUserFullName(fullName);
+    } else if (isSupabaseConfigured) {
+      // Fetch profile if fullName was omitted
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        if (userData.user) {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("full_name, roll_number")
+            .eq("id", userData.user.id)
+            .single();
+          if (profile?.full_name) {
+            setCurrentUserFullName(profile.full_name);
+          }
+          if (profile?.roll_number) {
+            setCurrentUserId(profile.roll_number);
+          }
+        }
+      } catch (err) {
+        console.warn("Profile fetch note:", err);
+      }
+    }
     setIsLoggedIn(true);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.auth.signOut();
+      } catch (err) {
+        console.error("Sign out error:", err);
+      }
+    }
     setIsLoggedIn(false);
   };
 
@@ -115,28 +185,20 @@ export default function PortalPage() {
             />
           ) : (
             <div className="space-y-8">
-              {/* Authenticated User Header */}
+              {/* Authenticated User Header (reflects real Supabase profile data) */}
               <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-navy-950 text-gold-400 dark:bg-gold-500 dark:text-navy-950 flex items-center justify-center font-bold text-lg shadow-md">
-                    {activeRole === "student" || activeRole === "parent"
-                      ? "MH"
-                      : activeRole === "teacher"
-                      ? "NJ"
-                      : "AD"}
+                  <div className="w-12 h-12 rounded-2xl bg-navy-950 text-gold-400 dark:bg-gold-500 dark:text-navy-950 flex items-center justify-center font-bold text-lg shadow-md flex-shrink-0 font-mono">
+                    {getInitials(currentUserFullName)}
                   </div>
                   <div>
                     <h3 className="font-display font-bold text-lg text-slate-900 dark:text-white">
-                      {activeRole === "student"
-                        ? mockStudent.name
-                        : activeRole === "parent"
-                        ? `Parent of ${mockStudent.name}`
-                        : activeRole === "teacher"
-                        ? mockTeacher.name
-                        : "Campus Administrator"}
+                      {activeRole === "parent"
+                        ? `Parent / Guardian of ${currentUserFullName}`
+                        : currentUserFullName}
                     </h3>
                     <div className="text-xs text-slate-500">
-                      Role: <strong className="uppercase text-medical-600 dark:text-medical-400">{activeRole}</strong> • ID: {currentUserId}
+                      Role: <strong className="uppercase text-medical-600 dark:text-medical-400">{activeRole}</strong> • ID: <span className="font-mono">{currentUserId}</span>
                     </div>
                   </div>
                 </div>
