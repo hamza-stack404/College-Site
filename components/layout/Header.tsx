@@ -8,25 +8,27 @@ import {
   Search,
   Menu,
   X,
-  ChevronDown,
   GraduationCap,
   Sparkles,
   ArrowRight,
   Award,
   BellRing,
+  Phone,
+  Mail,
+  MapPin,
+  Compass,
 } from "lucide-react";
 import { CrestLogo } from "../icons/CrestLogo";
 import { AnnouncementBar } from "./AnnouncementBar";
-import { MegaMenu } from "./MegaMenu";
 import { SearchModal } from "./SearchModal";
 import { ThemeToggle } from "../ui/ThemeToggle";
 import { Button } from "../ui/Button";
 import { cn } from "@/lib/utils";
+import { COLLEGE_INFO } from "@/lib/data/constants";
 
 export const Header: React.FC = () => {
   const [isScrolled, setIsScrolled] = useState(false);
-  const [isMobileOpen, setIsMobileOpen] = useState(false);
-  const [isGroupsHovered, setIsGroupsHovered] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const pathname = usePathname();
 
@@ -48,15 +50,27 @@ export const Header: React.FC = () => {
     };
   }, []);
 
+  // Close menu on route navigation
   useEffect(() => {
-    setIsMobileOpen(false);
-    setIsGroupsHovered(false);
+    setIsMenuOpen(false);
   }, [pathname]);
+
+  // Prevent background scroll when menu drawer is open
+  useEffect(() => {
+    if (isMenuOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "unset";
+    }
+    return () => {
+      document.body.style.overflow = "unset";
+    };
+  }, [isMenuOpen]);
 
   const navLinks = [
     { label: "Home", href: "/" },
     { label: "About", href: "/about" },
-    { label: "Groups Offered", href: "/groups", hasMegaMenu: true },
+    { label: "Groups Offered", href: "/groups" },
     { label: "Admissions", href: "/admissions" },
     { label: "Notice Board", href: "/notice-board", isBadge: true },
     { label: "Announcements", href: "/announcements" },
@@ -82,70 +96,19 @@ export const Header: React.FC = () => {
               : "bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-900 py-3.5"
           )}
         >
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
-            {/* Brand Logo */}
-            <Link href="/" className="group flex items-center focus:outline-none">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
+            {/* Brand Logo with Full Institutional Typography */}
+            <Link href="/" className="group flex items-center focus:outline-none flex-shrink-0">
               <CrestLogo />
             </Link>
 
-            {/* Desktop Navigation Links */}
-            <nav className="hidden xl:flex items-center gap-1">
-              {navLinks.map((link) => {
-                const isActive =
-                  link.href === "/"
-                    ? pathname === "/"
-                    : pathname.startsWith(link.href);
-
-                if (link.hasMegaMenu) {
-                  return (
-                    <div
-                      key={link.label}
-                      className="relative"
-                      onMouseEnter={() => setIsGroupsHovered(true)}
-                    >
-                      <Link
-                        href={link.href}
-                        className={cn(
-                          "px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-1 transition-all duration-150",
-                          isActive
-                            ? "text-medical-600 dark:text-medical-400 bg-medical-50/80 dark:bg-medical-950/50"
-                            : "text-slate-700 dark:text-slate-200 hover:text-medical-600 dark:hover:text-medical-400 hover:bg-slate-50 dark:hover:bg-slate-900"
-                        )}
-                      >
-                        <span>{link.label}</span>
-                        <ChevronDown className="w-3.5 h-3.5 transition-transform group-hover:rotate-180" />
-                      </Link>
-                    </div>
-                  );
-                }
-
-                return (
-                  <Link
-                    key={link.label}
-                    href={link.href}
-                    className={cn(
-                      "px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-150 relative",
-                      isActive
-                        ? "text-medical-600 dark:text-medical-400 bg-medical-50/80 dark:bg-medical-950/50"
-                        : "text-slate-700 dark:text-slate-200 hover:text-medical-600 dark:hover:text-medical-400 hover:bg-slate-50 dark:hover:bg-slate-900"
-                    )}
-                  >
-                    <span>{link.label}</span>
-                    {link.isBadge && (
-                      <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-                    )}
-                  </Link>
-                );
-              })}
-            </nav>
-
-            {/* Right Header Actions */}
-            <div className="flex items-center gap-2 sm:gap-2.5">
+            {/* Right Header Actions (Always visible outside the menu) */}
+            <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
               {/* Search Trigger */}
               <button
                 onClick={() => setIsSearchOpen(true)}
                 aria-label="Open Search (Ctrl+K)"
-                className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1.5 text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl text-xs font-medium transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 p-2 sm:px-3 sm:py-2 text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl text-xs font-medium transition-colors cursor-pointer"
               >
                 <Search className="w-4 h-4 text-medical-600 dark:text-medical-400" />
                 <span className="hidden md:inline">Search</span>
@@ -157,95 +120,158 @@ export const Header: React.FC = () => {
               {/* Theme Toggle */}
               <ThemeToggle />
 
-              {/* Quick Result / Portal Link */}
-              <Link href="/portal" className="hidden sm:inline-flex">
+              {/* Quick Student Portal Link */}
+              <Link href="/portal">
                 <Button size="sm" variant="outline" className="text-xs py-1.5 px-3">
                   Student Portal
                 </Button>
               </Link>
 
-              {/* Apply Now Primary Action */}
-              <Link href="/admissions" className="hidden sm:inline-flex">
-                <Button size="sm" variant="gold" className="text-xs py-1.5 px-3" rightIcon={<ArrowRight className="w-3.5 h-3.5" />}>
-                  Admissions 2026
-                </Button>
-              </Link>
-
-              {/* Mobile Menu Hamburger */}
+              {/* Global Navigation Menu Toggle (Active at all screen sizes) */}
               <button
-                onClick={() => setIsMobileOpen(!isMobileOpen)}
-                aria-label="Toggle navigation menu"
-                className="xl:hidden p-2 rounded-xl text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                onClick={() => setIsMenuOpen(!isMenuOpen)}
+                aria-label={isMenuOpen ? "Close navigation menu" : "Open navigation menu"}
+                className={cn(
+                  "p-2 sm:px-3 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition-all cursor-pointer border",
+                  isMenuOpen
+                    ? "bg-navy-950 text-white dark:bg-medical-500 dark:text-navy-950 border-navy-950 shadow-md"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700"
+                )}
               >
-                {isMobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+                {isMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+                <span className="hidden sm:inline">{isMenuOpen ? "Close" : "Menu"}</span>
               </button>
             </div>
           </div>
-
-          {/* Desktop MegaMenu on Hover */}
-          <AnimatePresence>
-            {isGroupsHovered && (
-              <MegaMenu onClose={() => setIsGroupsHovered(false)} />
-            )}
-          </AnimatePresence>
         </div>
 
-        {/* Mobile Navigation Drawer */}
+        {/* Global Slide-Out Menu Drawer (Responsive across all screen sizes) */}
         <AnimatePresence>
-          {isMobileOpen && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.25 }}
-              className="xl:hidden bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 px-4 py-6 max-h-[80vh] overflow-y-auto shadow-2xl"
-            >
-              <div className="space-y-1">
-                {navLinks.map((link) => {
-                  const isActive =
-                    link.href === "/"
-                      ? pathname === "/"
-                      : pathname.startsWith(link.href);
-                  return (
-                    <Link
-                      key={link.label}
-                      href={link.href}
-                      onClick={() => setIsMobileOpen(false)}
-                      className={cn(
-                        "block px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors",
-                        isActive
-                          ? "bg-medical-50 dark:bg-medical-950 text-medical-600 dark:text-medical-400"
-                          : "text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-900"
-                      )}
-                    >
-                      {link.label}
-                    </Link>
-                  );
-                })}
-              </div>
+          {isMenuOpen && (
+            <>
+              {/* Backdrop Overlay */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                onClick={() => setIsMenuOpen(false)}
+                className="fixed inset-0 top-[100px] bg-slate-950/60 backdrop-blur-sm z-40"
+              />
 
-              <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-800 space-y-2.5">
-                <Link
-                  href="/admissions"
-                  onClick={() => setIsMobileOpen(false)}
-                  className="block w-full"
-                >
-                  <Button variant="gold" size="md" className="w-full justify-center">
-                    Admissions 2026 (Apply Online)
-                  </Button>
-                </Link>
-                <Link
-                  href="/results"
-                  onClick={() => setIsMobileOpen(false)}
-                  className="block w-full"
-                >
-                  <Button variant="outline" size="sm" className="w-full justify-center gap-2">
-                    <Award className="w-4 h-4 text-gold-500" />
-                    Check BISE Board Results
-                  </Button>
-                </Link>
-              </div>
-            </motion.div>
+              {/* Drawer Container */}
+              <motion.div
+                initial={{ x: "100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "100%" }}
+                transition={{ type: "spring", damping: 25, stiffness: 250 }}
+                className="fixed top-[95px] right-0 bottom-0 w-full max-w-sm sm:max-w-md bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 z-50 flex flex-col shadow-2xl overflow-y-auto"
+              >
+                {/* Drawer Header */}
+                <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/50">
+                  <div className="flex items-center gap-2">
+                    <Compass className="w-5 h-5 text-medical-600 dark:text-medical-400" />
+                    <span className="font-display font-bold text-base text-slate-900 dark:text-white uppercase tracking-wider">
+                      Campus Navigation
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setIsMenuOpen(false)}
+                    className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Navigation Links Grid */}
+                <div className="p-6 flex-1 space-y-1">
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-3 mb-2">
+                    Academic & Campus Pages
+                  </div>
+                  {navLinks.map((link) => {
+                    const isActive =
+                      link.href === "/"
+                        ? pathname === "/"
+                        : pathname.startsWith(link.href);
+
+                    return (
+                      <Link
+                        key={link.label}
+                        href={link.href}
+                        onClick={() => setIsMenuOpen(false)}
+                        className={cn(
+                          "flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-colors",
+                          isActive
+                            ? "bg-medical-50 dark:bg-medical-950 text-medical-600 dark:text-medical-400"
+                            : "text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                        )}
+                      >
+                        <span>{link.label}</span>
+                        {link.isBadge && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+                            Circulars
+                          </span>
+                        )}
+                      </Link>
+                    );
+                  })}
+
+                  {/* Actions & Admissions CTA */}
+                  <div className="pt-6 mt-4 border-t border-slate-200 dark:border-slate-800 space-y-3">
+                    {/* ADMISSIONS_REOPEN: uncomment when admissions reopen
+                    <Link
+                      href="/admissions"
+                      onClick={() => setIsMenuOpen(false)}
+                      className="block w-full"
+                    >
+                      <Button variant="gold" size="md" className="w-full justify-center gap-2">
+                        <span>Admissions 2026 (Apply Online)</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </Button>
+                    </Link>
+                    */}
+
+                    <Link
+                      href="/portal"
+                      onClick={() => setIsMenuOpen(false)}
+                      className="block w-full"
+                    >
+                      <Button variant="primary" size="md" className="w-full justify-center gap-2">
+                        <GraduationCap className="w-4 h-4" />
+                        <span>Academic Portal (Student / Staff)</span>
+                      </Button>
+                    </Link>
+
+                    <Link
+                      href="/results"
+                      onClick={() => setIsMenuOpen(false)}
+                      className="block w-full"
+                    >
+                      <Button variant="outline" size="sm" className="w-full justify-center gap-2">
+                        <Award className="w-4 h-4 text-gold-500" />
+                        <span>FBISE Board Examination Results</span>
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+
+                {/* Drawer Footer Details */}
+                <div className="p-6 bg-slate-50 dark:bg-slate-950/60 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-500 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Phone className="w-3.5 h-3.5 text-medical-600 dark:text-medical-400" />
+                    <span>{COLLEGE_INFO.phonePrimary}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Mail className="w-3.5 h-3.5 text-medical-600 dark:text-medical-400" />
+                    <span>{COLLEGE_INFO.email}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <MapPin className="w-3.5 h-3.5 text-gold-500" />
+                    <span>{COLLEGE_INFO.address}</span>
+                  </div>
+                </div>
+              </motion.div>
+            </>
           )}
         </AnimatePresence>
       </header>

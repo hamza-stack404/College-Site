@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { PageHero } from "@/components/shared/PageHero";
 import { SectionHeader } from "@/components/shared/SectionHeader";
 import { Badge } from "@/components/ui/Badge";
 import { facultyData } from "@/lib/data/faculty";
 import { StaffMember } from "@/lib/types";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";
 import {
   User,
   GraduationCap,
@@ -17,12 +18,43 @@ import {
 } from "lucide-react";
 
 export default function FacultyPage() {
+  const [staffList, setStaffList] = useState<StaffMember[]>(facultyData);
   const [selectedRole, setSelectedRole] = useState<string>("All");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
+  useEffect(() => {
+    async function fetchFacultyMembers() {
+      if (!isSupabaseConfigured) return;
+      try {
+        const { data, error } = await supabase
+          .from("faculty")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        if (data && !error && data.length > 0) {
+          setStaffList(
+            data.map((f: any) => ({
+              id: f.id,
+              name: f.name,
+              role: f.role,
+              subject: f.subject,
+              labType: f.lab_type,
+              qualification: f.qualification,
+              classesTaught: f.classes_taught || [],
+              image: f.image_url,
+            }))
+          );
+        }
+      } catch (err) {
+        console.warn("Could not fetch faculty from Supabase:", err);
+      }
+    }
+    fetchFacultyMembers();
+  }, []);
+
   const roles = ["All", "Principal & VP", "Subject Teacher", "Lab Teacher", "PTI"];
 
-  const filteredStaff = facultyData.filter((member) => {
+  const filteredStaff = staffList.filter((member) => {
     let matchesRole = true;
     if (selectedRole === "Principal & VP") {
       matchesRole = member.role === "Principal" || member.role === "Vice Principal";

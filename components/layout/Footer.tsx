@@ -44,7 +44,7 @@ export const Footer: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8">
           {/* Col 1: Brand & Contact (2 cols) */}
           <div className="lg:col-span-2 space-y-4">
-            <CrestLogo showText={true} className="text-white" />
+            <CrestLogo showText={true} theme="dark" className="text-white" />
             <p className="text-xs sm:text-sm text-slate-400 leading-relaxed max-w-sm">
               Bahria College Hanif provides disciplined, high-achievement intermediate education in Pre-Medical, Pre-Engineering, and Computer Science (ICS) under the Federal Board of Intermediate and Secondary Education (FBISE) Islamabad.
             </p>

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { PageHero } from "@/components/shared/PageHero";
 import { SectionHeader } from "@/components/shared/SectionHeader";
@@ -18,7 +18,7 @@ import {
 } from "@/lib/data/admissions";
 import { COLLEGE_INFO } from "@/lib/data/constants";
 import { formatCurrency } from "@/lib/utils";
-import { submitAdmissionApplicationAction } from "@/lib/supabase/actions";
+import { submitAdmissionApplicationAction, getAppSettingAction } from "@/lib/supabase/actions";
 import {
   FileText,
   FileDown,
@@ -33,9 +33,24 @@ import {
 } from "lucide-react";
 
 export default function AdmissionsPage() {
+  const [isAdmissionsOpen, setIsAdmissionsOpen] = useState<boolean>(true);
   const [showFeeGenerator, setShowFeeGenerator] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  useEffect(() => {
+    async function checkAdmissionsStatus() {
+      try {
+        const res = await getAppSettingAction("admissions_open", true);
+        if (typeof res?.value === "boolean") {
+          setIsAdmissionsOpen(res.value);
+        }
+      } catch (err) {
+        console.warn("Could not check admissions status:", err);
+      }
+    }
+    checkAdmissionsStatus();
+  }, []);
 
   // Online Application form state
   const [formData, setFormData] = useState({
@@ -92,9 +107,11 @@ export default function AdmissionsPage() {
 
   const downloadableForms = [
     { title: "College Admission Application Form (Printable)", size: "1.2 MB", format: "PDF" },
+    /* Keep other forms commented out until admissions reopen
     { title: "Student Medical Fitness Certificate Form", size: "650 KB", format: "PDF" },
     { title: "Student Discipline & Attendance Undertaking Affidavit", size: "850 KB", format: "PDF" },
     { title: "College Bus Transport Registration Form", size: "720 KB", format: "PDF" },
+    */
   ];
 
   const accordionItems = faqsData.map((f) => ({
@@ -155,180 +172,212 @@ export default function AdmissionsPage() {
       </section>
 
       {/* 3. Online Admission Form (Connected to Supabase) */}
-      <section className="py-20 bg-white dark:bg-slate-900/50 border-y border-slate-200 dark:border-slate-800" id="apply-online">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-          <SectionHeader
-            badge="Direct Enrollment"
-            badgeVariant="medical"
-            title="Online Admission Application"
-            titleHighlight="Intake Session 2026–2027"
-            subtitle="Submit your initial registration details for document verification and merit list ranking."
-            align="center"
-          />
+      {isAdmissionsOpen ? (
+        <section className="py-20 bg-white dark:bg-slate-900/50 border-y border-slate-200 dark:border-slate-800" id="apply-online">
+          <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+            <SectionHeader
+              badge="Direct Enrollment"
+              badgeVariant="medical"
+              title="Online Admission Application"
+              titleHighlight="Intake Session 2026–2027"
+              subtitle="Submit your initial registration details for document verification and merit list ranking."
+              align="center"
+            />
 
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-xl space-y-6">
-            {submitResult && (
-              <div
-                className={`p-4 rounded-2xl border flex items-center gap-3 text-xs sm:text-sm ${
-                  submitResult.success
-                    ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 text-emerald-900 dark:text-emerald-200"
-                    : "bg-rose-50 dark:bg-rose-950/40 border-rose-300 text-rose-900 dark:text-rose-200"
-                }`}
-              >
-                {submitResult.success ? (
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
-                ) : (
-                  <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0" />
-                )}
-                <div>{submitResult.message}</div>
-              </div>
-            )}
+            <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-xl space-y-6">
+              {submitResult && (
+                <div
+                  className={`p-4 rounded-2xl border flex items-center gap-3 text-xs sm:text-sm ${
+                    submitResult.success
+                      ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 text-emerald-900 dark:text-emerald-200"
+                      : "bg-rose-50 dark:bg-rose-950/40 border-rose-300 text-rose-900 dark:text-rose-200"
+                  }`}
+                >
+                  {submitResult.success ? (
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0" />
+                  )}
+                  <div>{submitResult.message}</div>
+                </div>
+              )}
 
-            <form onSubmit={handleSubmitApplication} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Student Full Name *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Muhammad Ali"
-                    value={formData.applicant_name}
-                    onChange={(e) => setFormData({ ...formData, applicant_name: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"
-                  />
+              <form onSubmit={handleSubmitApplication} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Student Full Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Muhammad Ali"
+                      value={formData.applicant_name}
+                      onChange={(e) => setFormData({ ...formData, applicant_name: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Father&apos;s / Guardian&apos;s Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Tariq Mahmood"
+                      value={formData.father_name}
+                      onChange={(e) => setFormData({ ...formData, father_name: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Father&apos;s Service Category *
+                    </label>
+                    <select
+                      value={formData.father_service_category}
+                      onChange={(e) => setFormData({ ...formData, father_service_category: e.target.value as any })}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"
+                    >
+                      <option value="Civilian">Civilian</option>
+                      <option value="Navy">Pakistan Navy (Serving/Retired)</option>
+                      <option value="Army">Pakistan Army</option>
+                      <option value="Air Force">Pakistan Air Force</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Candidate B-Form / CNIC No *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. 42101-1234567-1"
+                      value={formData.b_form_number}
+                      onChange={(e) => setFormData({ ...formData, b_form_number: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"
+                    />
+                  </div>
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Father&apos;s / Guardian&apos;s Name *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Tariq Mahmood"
-                    value={formData.father_name}
-                    onChange={(e) => setFormData({ ...formData, father_name: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Applicant B-Form / CNIC *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="42201-1234567-1"
-                    value={formData.b_form_number}
-                    onChange={(e) => setFormData({ ...formData, b_form_number: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Category Quota *
-                  </label>
-                  <select
-                    value={formData.father_service_category}
-                    onChange={(e) => setFormData({ ...formData, father_service_category: e.target.value as any })}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm"
-                  >
-                    <option value="Civilian">Civilian (Open Merit)</option>
-                    <option value="Navy">Pakistan Navy Dependent</option>
-                    <option value="Army">Pakistan Army Dependent</option>
-                    <option value="Air Force">Pakistan Air Force Dependent</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Applied Discipline *
+                    Select Intermediate Academic Discipline *
                   </label>
                   <select
                     value={formData.selected_discipline}
                     onChange={(e) => setFormData({ ...formData, selected_discipline: e.target.value as any })}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"
                   >
-                    <option value="Pre-Medical">F.Sc Pre-Medical</option>
-                    <option value="Pre-Engineering">F.Sc Pre-Engineering</option>
-                    <option value="Computer Science">ICS Computer Science</option>
+                    <option value="Pre-Medical">F.Sc Pre-Medical (Physics, Chemistry, Biology)</option>
+                    <option value="Pre-Engineering">F.Sc Pre-Engineering (Physics, Chemistry, Mathematics)</option>
+                    <option value="Computer Science">ICS Computer Science (Physics, Computer Science, Mathematics)</option>
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Matric Total Marks *
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    value={formData.matric_total_marks}
-                    onChange={(e) => setFormData({ ...formData, matric_total_marks: Number(e.target.value) })}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Matriculation Obtained Marks *
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min={0}
+                      max={formData.matric_total_marks}
+                      placeholder="950"
+                      value={formData.matric_obtained_marks}
+                      onChange={(e) => setFormData({ ...formData, matric_obtained_marks: Number(e.target.value) })}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Matric Total Marks *
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      placeholder="1100"
+                      value={formData.matric_total_marks}
+                      onChange={(e) => setFormData({ ...formData, matric_total_marks: Number(e.target.value) })}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Obtained Marks *
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    value={formData.matric_obtained_marks}
-                    onChange={(e) => setFormData({ ...formData, matric_obtained_marks: Number(e.target.value) })}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm"
-                  />
-                </div>
-              </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Parent Contact Phone (WhatsApp) *
+                    </label>
+                    <input
+                      type="tel"
+                      required
+                      placeholder="0300-1234567"
+                      value={formData.contact_phone}
+                      onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"
+                    />
+                  </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Contact Phone (WhatsApp) *
-                  </label>
-                  <input
-                    type="tel"
-                    required
-                    placeholder="0300-1234567"
-                    value={formData.contact_phone}
-                    onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"
-                  />
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Email Address (Optional)
+                    </label>
+                    <input
+                      type="email"
+                      placeholder="parent@example.com"
+                      value={formData.contact_email}
+                      onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Email Address
-                  </label>
-                  <input
-                    type="email"
-                    placeholder="student@example.com"
-                    value={formData.contact_email}
-                    onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm focus:ring-2 focus:ring-medical-500 focus:outline-none"
-                  />
+                <div className="pt-2">
+                  <Button type="submit" variant="gold" size="md" className="w-full justify-center gap-2" disabled={isSubmitting}>
+                    <Send className="w-4 h-4" />
+                    <span>{isSubmitting ? "Submitting to Supabase..." : "Submit Online Application"}</span>
+                  </Button>
                 </div>
-              </div>
-
-              <div className="pt-2">
-                <Button type="submit" variant="gold" size="md" className="w-full justify-center gap-2" disabled={isSubmitting}>
-                  <Send className="w-4 h-4" />
-                  <span>{isSubmitting ? "Submitting to Supabase..." : "Submit Online Application"}</span>
-                </Button>
-              </div>
-            </form>
+              </form>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      ) : (
+        <section className="py-20 bg-white dark:bg-slate-900/50 border-y border-slate-200 dark:border-slate-800 text-center" id="apply-online">
+          <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+            <div className="w-16 h-16 rounded-3xl bg-amber-500/10 text-amber-600 dark:text-amber-400 mx-auto flex items-center justify-center font-bold shadow-inner">
+              <Clock className="w-8 h-8" />
+            </div>
+            <h3 className="font-display font-bold text-2xl sm:text-3xl text-slate-900 dark:text-white">
+              Admissions Are Currently Closed
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed max-w-xl mx-auto">
+              The online admission portal is currently closed. Merit list rankings have been finalized for the current session. For future registration dates, prospectus issuance, or general inquiries, please contact the admissions desk or review the college notice board.
+            </p>
+            <div className="pt-2 flex flex-wrap justify-center gap-3">
+              <Link href="/notice-board">
+                <Button variant="outline" size="sm">
+                  View Official Notice Board
+                </Button>
+              </Link>
+              <Link href="/contact">
+                <Button variant="primary" size="sm">
+                  Contact Admissions Desk
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* 4. Step-by-Step Admission Process */}
       <section className="py-20 bg-slate-50 dark:bg-slate-950">
@@ -416,20 +465,22 @@ export default function AdmissionsPage() {
               </table>
             </div>
 
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/60 border-t border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
-              <span>* Note: Official monthly fee challan slips can be generated and printed below.</span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowFeeGenerator(!showFeeGenerator)}
-                className="text-xs"
-              >
-                {showFeeGenerator ? "Hide Challan Generator" : "Open 3-Part Challan Preview"}
-              </Button>
-            </div>
+            {isAdmissionsOpen && (
+              <div className="p-4 bg-slate-50 dark:bg-slate-800/60 border-t border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
+                <span>* Note: Official monthly fee challan slips can be generated and printed below.</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowFeeGenerator(!showFeeGenerator)}
+                  className="text-xs"
+                >
+                  {showFeeGenerator ? "Hide Challan Generator" : "Open 3-Part Challan Preview"}
+                </Button>
+              </div>
+            )}
           </div>
 
-          {showFeeGenerator && (
+          {isAdmissionsOpen && showFeeGenerator && (
             <div className="max-w-4xl mx-auto pt-6">
               <FeeChallanGenerator />
             </div>

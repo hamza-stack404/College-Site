@@ -3,11 +3,13 @@ import React from "react";
 interface CrestLogoProps {
   className?: string;
   showText?: boolean;
+  theme?: "light" | "dark";
 }
 
 export const CrestLogo: React.FC<CrestLogoProps> = ({
   className = "h-12 w-auto",
   showText = true,
+  theme = "light",
 }) => {
   return (
     <div className={`flex items-center gap-3.5 select-none ${className}`}>
@@ -66,7 +68,11 @@ export const CrestLogo: React.FC<CrestLogoProps> = ({
       {showText && (
         <div className="flex flex-col text-left">
           <div className="flex items-center gap-1.5">
-            <span className="font-display font-black tracking-tight text-lg sm:text-xl text-navy-950 dark:text-white uppercase leading-none">
+            <span
+              className={`font-display font-black tracking-tight text-lg sm:text-xl uppercase leading-none ${
+                theme === "dark" ? "text-white" : "text-navy-950 dark:text-white"
+              }`}
+            >
               BAHRIA COLLEGE
             </span>
           </div>

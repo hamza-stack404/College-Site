@@ -65,7 +65,7 @@ export default function AnnouncementsPage() {
               >
                 <div className="relative h-56 w-full overflow-hidden">
                   <Image
-                    src={item.image_url}
+                    src={item.image_url || (item as any).image || "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=1200&q=80"}
                     alt={item.heading}
                     fill
                     className="object-cover group-hover:scale-105 transition-transform duration-500"

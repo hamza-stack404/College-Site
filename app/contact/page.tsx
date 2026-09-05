@@ -72,6 +72,18 @@ export default function ContactPage() {
           console.error("Supabase insert error:", error);
         }
       }
+
+      // Trigger Resend email delivery asynchronously
+      try {
+        await fetch("/api/contact", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        });
+      } catch (emailErr) {
+        console.warn("Email delivery notice:", emailErr);
+      }
+
       setIsSubmitted(true);
       reset();
     } catch (err) {

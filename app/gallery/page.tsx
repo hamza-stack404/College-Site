@@ -1,17 +1,50 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { PageHero } from "@/components/shared/PageHero";
 import { SectionHeader } from "@/components/shared/SectionHeader";
 import { Badge } from "@/components/ui/Badge";
 import { Lightbox } from "@/components/ui/Lightbox";
 import { galleryData } from "@/lib/data/gallery";
+import { GalleryItem } from "@/lib/types";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";
 import { Eye, Camera, Play, Sparkles } from "lucide-react";
 
 export default function GalleryPage() {
+  const [galleryItems, setGalleryItems] = useState<GalleryItem[]>(galleryData);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    async function fetchGalleryItems() {
+      if (!isSupabaseConfigured) return;
+      try {
+        const { data, error } = await supabase
+          .from("gallery")
+          .select("*")
+          .order("date", { ascending: false });
+
+        if (data && !error && data.length > 0) {
+          setGalleryItems(
+            data.map((g: any) => ({
+              id: g.id,
+              title: g.title,
+              category: g.category,
+              caption: g.caption || "",
+              date: g.date || "",
+              type: (g.media_type || g.type || "image") as "image" | "video",
+              mediaUrl: g.media_url,
+              thumbnailUrl: g.thumbnail_url || g.media_url,
+            }))
+          );
+        }
+      } catch (err) {
+        console.warn("Could not fetch gallery items from Supabase:", err);
+      }
+    }
+    fetchGalleryItems();
+  }, []);
 
   const categories = [
     { id: "all", label: "All Media" },
@@ -25,8 +58,8 @@ export default function GalleryPage() {
 
   const filteredItems =
     selectedCategory === "all"
-      ? galleryData
-      : galleryData.filter((item) => item.category === selectedCategory);
+      ? galleryItems
+      : galleryItems.filter((item) => item.category === selectedCategory);
 
   return (
     <div className="flex flex-col min-h-screen">

@@ -11,6 +11,7 @@ import { TeacherDashboard } from "@/components/portal/TeacherDashboard";
 import { AdminDashboard } from "@/components/portal/AdminDashboard";
 import { LogOut } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";
+import { getAppSettingAction } from "@/lib/supabase/actions";
 
 // NOTE: Full dashboard data-fetching (live timetable, fee records, examination marks from Supabase)
 // is a dedicated follow-up task. Current dashboards below receive structured mock props for UI layout
@@ -95,11 +96,16 @@ export default function PortalPage() {
   const [currentUserFullName, setCurrentUserFullName] = useState<string>("Muhammad Hamza Khan");
   const [isMarksEntryOpen, setIsMarksEntryOpen] = useState<boolean>(true);
 
-  // Restore authenticated session if active on mount
+  // Restore authenticated session and settings on mount
   useEffect(() => {
-    async function checkActiveSession() {
-      if (!isSupabaseConfigured) return;
+    async function initPortal() {
       try {
+        const marksRes = await getAppSettingAction("marks_entry_open", true);
+        if (typeof marksRes?.value === "boolean") {
+          setIsMarksEntryOpen(marksRes.value);
+        }
+
+        if (!isSupabaseConfigured) return;
         const { data: sessionData } = await supabase.auth.getSession();
         if (sessionData.session?.user) {
           const userId = sessionData.session.user.id;
@@ -122,7 +128,7 @@ export default function PortalPage() {
         console.error("Session verification error:", err);
       }
     }
-    checkActiveSession();
+    initPortal();
   }, []);
 
   const handleLoginSuccess = async (userId: string, role: PortalUserRole, fullName?: string) => {
