@@ -37,8 +37,8 @@ export default function NoticeBoardPage() {
           .order("is_pinned", { ascending: false })
           .order("date", { ascending: false });
 
-        if (data && !error && data.length > 0) {
-          setNotices(data as NoticeItem[]);
+        if (!error) {
+          setNotices((data as NoticeItem[]) || []);
         }
       } catch (err) {
         console.error("Failed to fetch notices from Supabase:", err);

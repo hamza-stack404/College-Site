@@ -24,8 +24,8 @@ export default function AnnouncementsPage() {
           .select("*")
           .order("date", { ascending: false });
 
-        if (data && !error && data.length > 0) {
-          setAnnouncements(data as AnnouncementItem[]);
+        if (!error) {
+          setAnnouncements((data as AnnouncementItem[]) || []);
         }
       } catch (err) {
         console.error("Failed to fetch announcements:", err);

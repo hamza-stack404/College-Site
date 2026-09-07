@@ -201,17 +201,14 @@ export async function updateAppSettingAction(key: string, value: any, accessToke
    3. Notice Actions (Publish & Real Delete)
    ========================================================================= */
 
-export async function createNoticeAction(notice: NoticeInput) {
-  if (!isSupabaseConfigured) {
-    return {
-      success: true,
-      message: "Notice saved in local state mode.",
-      data: { ...notice, id: "local-" + Date.now(), date: new Date().toISOString().split("T")[0] },
-    };
+export async function createNoticeAction(notice: NoticeInput, accessToken: string) {
+  const auth = await verifyAdminCaller(accessToken);
+  if (!auth.authorized) {
+    return { success: false, message: auth.error || "Unauthorized" };
   }
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin!
       .from("notices")
       .insert([
         {
@@ -540,3 +537,213 @@ export async function adminResetPasswordAction(input: AdminResetPasswordInput) {
     data: { tempPassword: newTempPassword },
   };
 }
+
+export interface DeletePortalAccountInput {
+  userId: string;
+  accessToken: string;
+}
+
+/**
+ * Server Action: Admin deletes a user account completely (Auth user + Profile row)
+ */
+export async function deletePortalAccountAction(input: DeletePortalAccountInput) {
+  const auth = await verifyAdminCaller(input.accessToken);
+  if (!auth.authorized) {
+    return { success: false, message: auth.error || "Unauthorized" };
+  }
+
+  try {
+    // Delete profile row first
+    await supabaseAdmin!.from("profiles").delete().eq("id", input.userId);
+    // Delete auth user from Supabase Auth
+    const { error: deleteErr } = await supabaseAdmin!.auth.admin.deleteUser(input.userId);
+
+    if (deleteErr) {
+      console.warn("Auth user deletion warning:", deleteErr.message);
+    }
+
+    revalidatePath("/portal");
+    return { success: true, message: "Account deleted permanently." };
+  } catch (err: any) {
+    return { success: false, message: err.message || "Failed to delete account." };
+  }
+}
+
+/* =========================================================================
+   8. Timetable Management (Per Section Image)
+   ========================================================================= */
+
+export interface TimetableInput {
+  discipline: string;
+  classLevel: string;
+  section: string;
+  imageUrl: string;
+}
+
+export async function upsertTimetableAction(input: TimetableInput, accessToken: string) {
+  const auth = await verifyAdminCaller(accessToken);
+  if (!auth.authorized) {
+    return { success: false, message: auth.error || "Unauthorized" };
+  }
+
+  try {
+    const { data, error } = await supabaseAdmin!
+      .from("timetables")
+      .upsert(
+        {
+          discipline: input.discipline,
+          class_level: input.classLevel,
+          section: input.section,
+          image_url: input.imageUrl,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "discipline,class_level,section" }
+      )
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    revalidatePath("/portal");
+    return { success: true, message: "Section timetable uploaded & updated successfully.", data };
+  } catch (err: any) {
+    return { success: false, message: err.message || "Failed to save timetable." };
+  }
+}
+
+export async function getTimetableAction(discipline: string, classLevel: string, section: string) {
+  if (!isSupabaseConfigured) return { success: false, data: null };
+
+  try {
+    const { data, error } = await supabase
+      .from("timetables")
+      .select("*")
+      .eq("discipline", discipline)
+      .eq("class_level", classLevel)
+      .eq("section", section)
+      .single();
+
+    if (error || !data) {
+      return { success: false, data: null };
+    }
+
+    return { success: true, data };
+  } catch (err: any) {
+    return { success: false, data: null };
+  }
+}
+
+/* =========================================================================
+   9. Teacher Assigned Classes Management
+   ========================================================================= */
+
+export async function updateTeacherClassesAction(
+  teacherId: string,
+  classesTaught: any[],
+  accessToken: string
+) {
+  const auth = await verifyAdminCaller(accessToken);
+  if (!auth.authorized) {
+    return { success: false, message: auth.error || "Unauthorized" };
+  }
+
+  try {
+    const { data, error } = await supabaseAdmin!
+      .from("profiles")
+      .update({ classes_taught: classesTaught })
+      .eq("id", teacherId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    revalidatePath("/portal");
+    return { success: true, message: "Teacher class allocations updated.", data };
+  } catch (err: any) {
+    return { success: false, message: err.message || "Failed to update classes." };
+  }
+}
+
+/* =========================================================================
+   10. Examination Marks & Results Management (Assessment vs Send-up)
+   ========================================================================= */
+
+export interface SubmitMarksInput {
+  studentId: string;
+  examType: "Assessment" | "Send-up" | "Pre-Board";
+  examName: string;
+  examDate: string;
+  subjects: {
+    name: string;
+    totalMarks: number;
+    obtainedMarks: number;
+    grade?: string;
+  }[];
+}
+
+export async function submitStudentMarksAction(input: SubmitMarksInput, accessToken: string) {
+  if (!isSupabaseAdminConfigured || !supabaseAdmin) {
+    return { success: false, message: "Admin client not configured." };
+  }
+
+  const { data: callerData, error: callerErr } = await supabaseAdmin.auth.getUser(accessToken);
+  if (callerErr || !callerData.user) {
+    return { success: false, message: "Not authenticated." };
+  }
+
+  // Calculate totals
+  const totalObtained = input.subjects.reduce((sum, s) => sum + Number(s.obtainedMarks || 0), 0);
+  const totalMax = input.subjects.reduce((sum, s) => sum + Number(s.totalMarks || 100), 0);
+  const percentage = totalMax > 0 ? Number(((totalObtained / totalMax) * 100).toFixed(2)) : 0;
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("internal_exam_results")
+      .upsert(
+        {
+          student_id: input.studentId,
+          exam_type: input.examType,
+          exam_name: input.examName,
+          exam_date: input.examDate,
+          subjects: input.subjects,
+          total_obtained: totalObtained,
+          total_max: totalMax,
+          percentage,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "student_id,exam_type" }
+      )
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    revalidatePath("/portal");
+    return { success: true, message: "Examination marks submitted successfully.", data };
+  } catch (err: any) {
+    return { success: false, message: err.message || "Failed to save exam marks." };
+  }
+}
+
+export async function getStudentExamResultsAction(studentId: string, examType?: string) {
+  if (!isSupabaseConfigured) return { success: false, data: [] };
+
+  try {
+    let query = supabase
+      .from("internal_exam_results")
+      .select("*")
+      .eq("student_id", studentId);
+
+    if (examType) {
+      query = query.eq("exam_type", examType);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    return { success: true, data: data || [] };
+  } catch (err: any) {
+    return { success: false, data: [] };
+  }
+}
+

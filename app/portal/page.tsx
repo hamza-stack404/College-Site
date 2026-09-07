@@ -94,6 +94,7 @@ export default function PortalPage() {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
   const [currentUserId, setCurrentUserId] = useState<string>("BCH-2026-0101");
   const [currentUserFullName, setCurrentUserFullName] = useState<string>("Muhammad Hamza Khan");
+  const [userProfileData, setUserProfileData] = useState<any>(null);
   const [isMarksEntryOpen, setIsMarksEntryOpen] = useState<boolean>(true);
 
   // Restore authenticated session and settings on mount
@@ -111,13 +112,14 @@ export default function PortalPage() {
           const userId = sessionData.session.user.id;
           const { data: profile } = await supabase
             .from("profiles")
-            .select("roll_number, full_name, role")
+            .select("id, roll_number, full_name, role, discipline, section, class_level, category, classes_taught")
             .eq("id", userId)
             .single();
 
           if (profile) {
             setCurrentUserId(profile.roll_number || "BCH-2026-0101");
             setCurrentUserFullName(profile.full_name || "College Scholar");
+            setUserProfileData(profile);
             if (profile.role) {
               setActiveRole(profile.role as PortalUserRole);
             }
@@ -136,21 +138,20 @@ export default function PortalPage() {
     setActiveRole(role);
     if (fullName) {
       setCurrentUserFullName(fullName);
-    } else if (isSupabaseConfigured) {
-      // Fetch profile if fullName was omitted
+    }
+    if (isSupabaseConfigured) {
       try {
         const { data: userData } = await supabase.auth.getUser();
         if (userData.user) {
           const { data: profile } = await supabase
             .from("profiles")
-            .select("full_name, roll_number")
+            .select("id, roll_number, full_name, role, discipline, section, class_level, category, classes_taught")
             .eq("id", userData.user.id)
             .single();
-          if (profile?.full_name) {
-            setCurrentUserFullName(profile.full_name);
-          }
-          if (profile?.roll_number) {
-            setCurrentUserId(profile.roll_number);
+          if (profile) {
+            setUserProfileData(profile);
+            if (profile.full_name) setCurrentUserFullName(profile.full_name);
+            if (profile.roll_number) setCurrentUserId(profile.roll_number);
           }
         }
       } catch (err) {
@@ -216,10 +217,45 @@ export default function PortalPage() {
               </div>
 
               {/* Render Respective Dashboard */}
-              {activeRole === "student" && <StudentDashboard student={mockStudent} />}
-              {activeRole === "parent" && <ParentDashboard student={mockStudent} />}
+              {activeRole === "student" && (
+                <StudentDashboard
+                  student={{
+                    ...mockStudent,
+                    id: currentUserId,
+                    name: currentUserFullName,
+                    group: (userProfileData?.discipline || mockStudent.group) as any,
+                    classLevel: (userProfileData?.class_level || mockStudent.classLevel) as any,
+                    section: userProfileData?.section || mockStudent.section,
+                    category: (userProfileData?.category || mockStudent.category) as any,
+                  }}
+                />
+              )}
+              {activeRole === "parent" && (
+                <ParentDashboard
+                  student={{
+                    ...mockStudent,
+                    id: currentUserId,
+                    name: currentUserFullName,
+                    group: (userProfileData?.discipline || mockStudent.group) as any,
+                    classLevel: (userProfileData?.class_level || mockStudent.classLevel) as any,
+                    section: userProfileData?.section || mockStudent.section,
+                    category: (userProfileData?.category || mockStudent.category) as any,
+                  }}
+                />
+              )}
               {activeRole === "teacher" && (
-                <TeacherDashboard teacher={mockTeacher} isMarksEntryOpen={isMarksEntryOpen} />
+                <TeacherDashboard
+                  teacher={{
+                    ...mockTeacher,
+                    id: currentUserId,
+                    name: currentUserFullName,
+                    classesTaught:
+                      userProfileData?.classes_taught && userProfileData.classes_taught.length > 0
+                        ? userProfileData.classes_taught
+                        : mockTeacher.classesTaught,
+                  }}
+                  isMarksEntryOpen={isMarksEntryOpen}
+                />
               )}
               {activeRole === "admin" && (
                 <AdminDashboard

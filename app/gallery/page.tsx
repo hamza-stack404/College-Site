@@ -25,9 +25,9 @@ export default function GalleryPage() {
           .select("*")
           .order("date", { ascending: false });
 
-        if (data && !error && data.length > 0) {
+        if (!error) {
           setGalleryItems(
-            data.map((g: any) => ({
+            (data || []).map((g: any) => ({
               id: g.id,
               title: g.title,
               category: g.category,

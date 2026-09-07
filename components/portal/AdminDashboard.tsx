@@ -30,6 +30,8 @@ import {
   FileText,
   Upload,
   Calendar,
+  Layers,
+  X,
 } from "lucide-react";
 import {
   createNoticeAction,
@@ -42,8 +44,11 @@ import {
   deleteGalleryItemAction,
   createPortalAccountAction,
   adminResetPasswordAction,
+  deletePortalAccountAction,
   getAppSettingAction,
   updateAppSettingAction,
+  upsertTimetableAction,
+  updateTeacherClassesAction,
 } from "@/lib/supabase/actions";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";
 import { uploadFileToStorage } from "@/lib/supabase/storage";
@@ -62,7 +67,17 @@ interface ProfileRecord {
   discipline?: string;
   section?: string;
   category?: string;
+  classes_taught?: { group: string; classLevel: string; section: string }[];
   must_change_password?: boolean;
+}
+
+interface TimetableRecord {
+  id?: string;
+  discipline: string;
+  class_level: string;
+  section: string;
+  image_url: string;
+  updated_at?: string;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -70,7 +85,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onToggleMarksEntry: propToggleMarksEntry,
 }) => {
   const [activeAdminTab, setActiveAdminTab] = useState<
-    "notices" | "announcements" | "faculty" | "gallery" | "accounts" | "admit_cards"
+    "notices" | "announcements" | "faculty" | "gallery" | "timetables" | "accounts" | "admit_cards"
   >("notices");
 
   // Gate controls (Supabase-backed settings)
@@ -80,9 +95,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Status message
   const [actionMessage, setActionMessage] = useState("");
-  const showNotification = (msg: string) => {
-    setActionMessage(msg);
-    setTimeout(() => setActionMessage(""), 4000);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const showNotification = (msg: string, type: "success" | "error" = "success") => {
+    if (type === "error") {
+      setErrorMessage(msg);
+      setTimeout(() => setErrorMessage(""), 5000);
+    } else {
+      setActionMessage(msg);
+      setTimeout(() => setActionMessage(""), 4000);
+    }
   };
 
   // Helper to fetch session token for admin actions
@@ -157,8 +179,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         .from("notices")
         .select("*")
         .order("date", { ascending: false });
-      if (data && !error && data.length > 0) {
-        setNoticesList(data as NoticeItem[]);
+      if (!error) {
+        setNoticesList((data as NoticeItem[]) || []);
       }
     } catch (e) {
       console.warn("Notice fetch note:", e);
@@ -173,18 +195,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     e.preventDefault();
     setIsPublishingNotice(true);
     try {
-      const res = await createNoticeAction({
-        title: newNoticeTitle,
-        category: newNoticeCategory,
-        description: newNoticeDesc,
-        is_pinned: false,
-      });
+      const token = await getAccessToken();
+      if (!token) {
+        showNotification("Authentication token missing. Please sign in again.", "error");
+        return;
+      }
+
+      const res = await createNoticeAction(
+        {
+          title: newNoticeTitle,
+          category: newNoticeCategory,
+          description: newNoticeDesc,
+          is_pinned: false,
+        },
+        token
+      );
 
       if (res.success && res.data) {
         setNoticesList([res.data as any, ...noticesList]);
         setNewNoticeTitle("");
         setNewNoticeDesc("");
         showNotification("Notice published live!");
+      } else {
+        showNotification(res.message || "Failed to publish notice.", "error");
       }
     } finally {
       setIsPublishingNotice(false);
@@ -218,8 +251,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         .from("announcements")
         .select("*")
         .order("date", { ascending: false });
-      if (data && !error && data.length > 0) {
-        setAnnouncementsList(data as any);
+      if (!error) {
+        setAnnouncementsList((data as any) || []);
       }
     } catch (e) {
       console.warn("Announcements fetch note:", e);
@@ -237,10 +270,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const token = await getAccessToken();
       if (!token) return;
 
-      let imageUrl = "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=1200&q=80";
+      let imageUrl: string | null = null;
       if (annImageFile) {
         const uploadRes = await uploadFileToStorage(annImageFile, "gallery-media");
-        if (uploadRes.url) imageUrl = uploadRes.url;
+        if (uploadRes.error || !uploadRes.url) {
+          showNotification(`Banner upload failed: ${uploadRes.error || "Storage error"}`, "error");
+          setIsPublishingAnn(false);
+          return;
+        }
+        imageUrl = uploadRes.url;
+      } else {
+        imageUrl = "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=1200&q=80";
       }
 
       const res = await createAnnouncementAction(
@@ -259,6 +299,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         setNewAnnDesc("");
         setAnnImageFile(null);
         showNotification("Announcement published live!");
+      } else {
+        showNotification(res.message || "Failed to publish announcement.", "error");
       }
     } finally {
       setIsPublishingAnn(false);
@@ -276,14 +318,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   /* =========================================================================
-     3. Faculty Management (Real CRUD)
+     3. Faculty Management (Real CRUD with explicit upload error handling)
      ========================================================================= */
   const [facultyList, setFacultyList] = useState<StaffMember[]>(facultyData);
   const [facultyName, setFacultyName] = useState("");
   const [facultyRole, setFacultyRole] = useState("Subject Teacher");
   const [facultySubject, setFacultySubject] = useState("");
   const [facultyQual, setFacultyQual] = useState("");
-  const [facultyClassTaught, setFacultyClassTaught] = useState("11th Pre-Medical");
+  const [facultyClassTaught, setFacultyClassTaught] = useState("Pre-Medical");
+  const [facultySection, setFacultySection] = useState("Section A");
   const [facultyPhotoFile, setFacultyPhotoFile] = useState<File | null>(null);
   const [isSavingFaculty, setIsSavingFaculty] = useState(false);
 
@@ -294,9 +337,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         .from("faculty")
         .select("*")
         .order("created_at", { ascending: false });
-      if (data && !error && data.length > 0) {
+      if (!error) {
         setFacultyList(
-          data.map((f) => ({
+          (data || []).map((f) => ({
             id: f.id,
             name: f.name,
             role: f.role,
@@ -324,10 +367,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const token = await getAccessToken();
       if (!token) return;
 
-      let photoUrl = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80";
+      let photoUrl: string | null = null;
       if (facultyPhotoFile) {
         const uploadRes = await uploadFileToStorage(facultyPhotoFile, "faculty-photos");
-        if (uploadRes.url) photoUrl = uploadRes.url;
+        if (uploadRes.error || !uploadRes.url) {
+          showNotification(`Faculty photo upload failed: ${uploadRes.error || "Storage bucket missing"}`, "error");
+          setIsSavingFaculty(false);
+          return;
+        }
+        photoUrl = uploadRes.url;
+      } else {
+        photoUrl = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80";
       }
 
       const res = await createFacultyAction(
@@ -336,7 +386,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           role: facultyRole,
           subject: facultySubject || undefined,
           qualification: facultyQual,
-          classes_taught: [{ classLevel: "11th", group: facultyClassTaught, section: "Section A" }],
+          classes_taught: [{ classLevel: "11th", group: facultyClassTaught, section: facultySection }],
           image_url: photoUrl,
         },
         token
@@ -349,6 +399,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         setFacultyPhotoFile(null);
         fetchFaculty();
         showNotification("Faculty member added successfully.");
+      } else {
+        showNotification(res.message || "Failed to add faculty member.", "error");
       }
     } finally {
       setIsSavingFaculty(false);
@@ -366,7 +418,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   /* =========================================================================
-     4. Gallery Management (Real CRUD)
+     4. Gallery Management (Real CRUD with explicit upload error handling)
      ========================================================================= */
   const [galleryList, setGalleryList] = useState<GalleryItem[]>(galleryData);
   const [galleryTitle, setGalleryTitle] = useState("");
@@ -383,9 +435,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         .from("gallery")
         .select("*")
         .order("date", { ascending: false });
-      if (data && !error && data.length > 0) {
+      if (!error) {
         setGalleryList(
-          data.map((g) => ({
+          (data || []).map((g) => ({
             id: g.id,
             title: g.title,
             category: g.category,
@@ -413,10 +465,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const token = await getAccessToken();
       if (!token) return;
 
-      let mediaUrl = "https://images.unsplash.com/photo-1521587760476-6c12a4b040da?auto=format&fit=crop&w=1200&q=80";
+      let mediaUrl: string | null = null;
       if (galleryFile) {
         const uploadRes = await uploadFileToStorage(galleryFile, "gallery-media");
-        if (uploadRes.url) mediaUrl = uploadRes.url;
+        if (uploadRes.error || !uploadRes.url) {
+          showNotification(`Gallery media upload failed: ${uploadRes.error || "Storage error"}`, "error");
+          setIsSavingGallery(false);
+          return;
+        }
+        mediaUrl = uploadRes.url;
+      } else {
+        mediaUrl = "https://images.unsplash.com/photo-1521587760476-6c12a4b040da?auto=format&fit=crop&w=1200&q=80";
       }
 
       const res = await createGalleryItemAction(
@@ -437,6 +496,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         setGalleryFile(null);
         fetchGallery();
         showNotification("Gallery item published live.");
+      } else {
+        showNotification(res.message || "Failed to save gallery item.", "error");
       }
     } finally {
       setIsSavingGallery(false);
@@ -454,7 +515,77 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   /* =========================================================================
-     5. User Accounts & Temporary Password Management
+     5. Timetable Management (D2: Upload per-section timetable images)
+     ========================================================================= */
+  const [ttDiscipline, setTtDiscipline] = useState<string>("Pre-Medical");
+  const [ttClassLevel, setTtClassLevel] = useState<string>("11th");
+  const [ttSection, setTtSection] = useState<string>("Section A");
+  const [ttImageFile, setTtImageFile] = useState<File | null>(null);
+  const [isSavingTimetable, setIsSavingTimetable] = useState(false);
+  const [timetablesList, setTimetablesList] = useState<TimetableRecord[]>([]);
+
+  const fetchTimetables = async () => {
+    if (!isSupabaseConfigured) return;
+    try {
+      const { data, error } = await supabase
+        .from("timetables")
+        .select("*")
+        .order("updated_at", { ascending: false });
+      if (!error && data) {
+        setTimetablesList(data);
+      }
+    } catch (err) {
+      console.warn("Could not fetch timetables:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (activeAdminTab === "timetables") fetchTimetables();
+  }, [activeAdminTab]);
+
+  const handleUploadTimetable = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ttImageFile) {
+      showNotification("Please select a timetable image file to upload.", "error");
+      return;
+    }
+
+    setIsSavingTimetable(true);
+    try {
+      const token = await getAccessToken();
+      if (!token) return;
+
+      const uploadRes = await uploadFileToStorage(ttImageFile, "timetables");
+      if (uploadRes.error || !uploadRes.url) {
+        showNotification(`Timetable image upload failed: ${uploadRes.error || "Storage error"}`, "error");
+        setIsSavingTimetable(false);
+        return;
+      }
+
+      const res = await upsertTimetableAction(
+        {
+          discipline: ttDiscipline,
+          classLevel: ttClassLevel,
+          section: ttSection,
+          imageUrl: uploadRes.url,
+        },
+        token
+      );
+
+      if (res.success) {
+        setTtImageFile(null);
+        fetchTimetables();
+        showNotification(`Timetable updated for ${ttClassLevel} ${ttDiscipline} (${ttSection}).`);
+      } else {
+        showNotification(res.message || "Failed to update timetable in database.", "error");
+      }
+    } finally {
+      setIsSavingTimetable(false);
+    }
+  };
+
+  /* =========================================================================
+     6. User Accounts & Password & Teacher Sections (D1, D4, D7)
      ========================================================================= */
   const [accountRole, setAccountRole] = useState<PortalUserRole>("student");
   const [accountLoginId, setAccountLoginId] = useState("");
@@ -480,6 +611,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [profilesList, setProfilesList] = useState<ProfileRecord[]>([]);
   const [isLoadingProfiles, setIsLoadingProfiles] = useState(false);
   const [resettingUserId, setResettingUserId] = useState<string | null>(null);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+
+  // Teacher Classes Assignment Modal / Drawer State (D4)
+  const [editingTeacher, setEditingTeacher] = useState<ProfileRecord | null>(null);
+  const [teacherAssignedClasses, setTeacherAssignedClasses] = useState<{ group: string; classLevel: string; section: string }[]>([]);
+  const [newClassGroup, setNewClassGroup] = useState("Pre-Medical");
+  const [newClassLevel, setNewClassLevel] = useState("11th");
+  const [newClassSection, setNewClassSection] = useState("Section A");
+  const [isSavingClasses, setIsSavingClasses] = useState(false);
 
   const fetchProfiles = async () => {
     if (!isSupabaseConfigured) return;
@@ -487,7 +627,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, roll_number, full_name, role, discipline, section, category, must_change_password")
+        .select("id, roll_number, full_name, role, discipline, section, category, classes_taught, must_change_password")
         .order("created_at", { ascending: false });
 
       if (data && !error) {
@@ -524,7 +664,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         fatherName: accountFatherName,
         discipline: accountRole === "student" ? accountDiscipline : undefined,
         classLevel: accountRole === "student" ? accountClassLevel : undefined,
-        section: accountRole === "student" ? accountSection : undefined,
+        section: accountRole === "student" || accountRole === "teacher" ? accountSection : undefined,
         category: accountCategory,
         contactPhone: accountContactPhone,
       });
@@ -592,6 +732,76 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  // D7: Delete Portal Account
+  const handleDeleteAccount = async (userId: string, rollNumber: string) => {
+    if (!window.confirm(`Are you sure you want to permanently delete account ${rollNumber}? This cannot be undone.`)) {
+      return;
+    }
+
+    setDeletingUserId(userId);
+    try {
+      const token = await getAccessToken();
+      if (!token) return;
+
+      const res = await deletePortalAccountAction({ userId, accessToken: token });
+      if (res.success) {
+        setProfilesList(profilesList.filter((p) => p.id !== userId));
+        showNotification(`Account ${rollNumber} deleted successfully.`);
+      } else {
+        showNotification(res.message || "Failed to delete account.", "error");
+      }
+    } finally {
+      setDeletingUserId(null);
+    }
+  };
+
+  // D4: Open and save assigned classes for teacher
+  const openTeacherClassManager = (teacher: ProfileRecord) => {
+    setEditingTeacher(teacher);
+    setTeacherAssignedClasses(teacher.classes_taught || []);
+  };
+
+  const handleAddClassAssignment = () => {
+    const exists = teacherAssignedClasses.some(
+      (c) => c.group === newClassGroup && c.classLevel === newClassLevel && c.section === newClassSection
+    );
+    if (exists) {
+      showNotification("This class and section is already allocated to this teacher.", "error");
+      return;
+    }
+
+    setTeacherAssignedClasses([
+      ...teacherAssignedClasses,
+      { group: newClassGroup, classLevel: newClassLevel, section: newClassSection },
+    ]);
+  };
+
+  const handleRemoveClassAssignment = (index: number) => {
+    setTeacherAssignedClasses(teacherAssignedClasses.filter((_, i) => i !== index));
+  };
+
+  const handleSaveTeacherClasses = async () => {
+    if (!editingTeacher) return;
+    setIsSavingClasses(true);
+    try {
+      const token = await getAccessToken();
+      if (!token) return;
+
+      const res = await updateTeacherClassesAction(editingTeacher.id, teacherAssignedClasses, token);
+      if (res.success) {
+        setProfilesList(
+          profilesList.map((p) => (p.id === editingTeacher.id ? { ...p, classes_taught: teacherAssignedClasses } : p))
+        );
+        showNotification(`Class assignments saved for ${editingTeacher.full_name}.`);
+        setEditingTeacher(null);
+      } else {
+        showNotification(res.message || "Failed to update teacher classes.", "error");
+      }
+    } finally {
+      setIsSavingClasses(false);
+    }
+  };
+
   const handleCopyPassword = () => {
     if (tempPasswordResult) {
       navigator.clipboard.writeText(tempPasswordResult.tempPassword);
@@ -601,7 +811,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   /* =========================================================================
-     6. Admit Card Generator (Admin-Only Tool)
+     7. Admit Card Generator (Admin-Only Tool)
      ========================================================================= */
   const [admitStudentName, setAdmitStudentName] = useState("Muhammad Hamza Khan");
   const [admitFatherName, setAdmitFatherName] = useState("Tariq Mahmood Khan");
@@ -617,11 +827,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   return (
     <div className="space-y-8">
-      {/* Top Notification Bar */}
+      {/* Top Status Notification Bars */}
       {actionMessage && (
         <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 text-emerald-800 dark:text-emerald-200 text-xs sm:text-sm font-semibold flex items-center gap-2">
           <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
           <span>{actionMessage}</span>
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 text-rose-800 dark:text-rose-200 text-xs sm:text-sm font-semibold flex items-center gap-2">
+          <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0" />
+          <span>{errorMessage}</span>
         </div>
       )}
 
@@ -693,6 +910,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           { id: "announcements", label: "Announcements" },
           { id: "faculty", label: "Faculty Directory" },
           { id: "gallery", label: "Media Gallery" },
+          { id: "timetables", label: "Manage Timetables" },
           { id: "accounts", label: "User Accounts & Passwords" },
           { id: "admit_cards", label: "Admit Card Generator" },
         ].map((tab) => (
@@ -775,25 +993,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <h4 className="font-display font-bold text-lg text-slate-900 dark:text-white">
               Active Circulars ({noticesList.length})
             </h4>
-            <div className="divide-y divide-slate-100 dark:divide-slate-800">
-              {noticesList.map((n) => (
-                <div key={n.id} className="py-3.5 flex items-center justify-between text-xs sm:text-sm">
-                  <div className="space-y-0.5">
-                    <div className="font-bold text-slate-900 dark:text-white">{n.title}</div>
-                    <div className="text-xs text-slate-400">{n.category} • Published {n.date}</div>
+            {noticesList.length === 0 ? (
+              <div className="text-center py-8 text-xs text-slate-500">No notices active. Publish a notice above.</div>
+            ) : (
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                {noticesList.map((n) => (
+                  <div key={n.id} className="py-3.5 flex items-center justify-between text-xs sm:text-sm">
+                    <div className="space-y-0.5">
+                      <div className="font-bold text-slate-900 dark:text-white">{n.title}</div>
+                      <div className="text-xs text-slate-400">{n.category} • Published {n.date}</div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeleteNotice(n.id)}
+                      className="text-rose-500 hover:text-rose-600"
+                      title="Delete Notice"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleDeleteNotice(n.id)}
-                    className="text-rose-500 hover:text-rose-600"
-                    title="Delete Notice"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -850,7 +1072,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Upload Banner Photo (Supabase Storage)
+                    Upload Banner Photo (gallery-media bucket)
                   </label>
                   <input
                     type="file"
@@ -872,30 +1094,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <h4 className="font-display font-bold text-lg text-slate-900 dark:text-white">
               Active Announcements ({announcementsList.length})
             </h4>
-            <div className="divide-y divide-slate-100 dark:divide-slate-800">
-              {announcementsList.map((a) => (
-                <div key={a.id} className="py-3.5 flex items-center justify-between text-xs sm:text-sm">
-                  <div>
-                    <div className="font-bold text-slate-900 dark:text-white">{a.heading}</div>
-                    <div className="text-xs text-slate-400">{a.date}</div>
+            {announcementsList.length === 0 ? (
+              <div className="text-center py-8 text-xs text-slate-500">No announcements active. Publish one above.</div>
+            ) : (
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                {announcementsList.map((a) => (
+                  <div key={a.id} className="py-3.5 flex items-center justify-between text-xs sm:text-sm">
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-white">{a.heading}</div>
+                      <div className="text-xs text-slate-400">{a.date}</div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeleteAnnouncement(a.id)}
+                      className="text-rose-500 hover:text-rose-600"
+                      title="Delete Announcement"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleDeleteAnnouncement(a.id)}
-                    className="text-rose-500 hover:text-rose-600"
-                    title="Delete Announcement"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* TAB 3: Faculty Directory (Real CRUD) */}
+      {/* TAB 3: Faculty Directory (Real CRUD with explicit upload handling) */}
       {activeAdminTab === "faculty" && (
         <div className="space-y-6">
           <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-sm space-y-6">
@@ -964,25 +1190,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Class Allocation
+                    Initial Stream
                   </label>
                   <select
                     value={facultyClassTaught}
                     onChange={(e) => setFacultyClassTaught(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
                   >
-                    <option value="Pre-Medical">Class 11 & 12 Pre-Medical</option>
-                    <option value="Pre-Engineering">Class 11 & 12 Pre-Engineering</option>
-                    <option value="Computer Science">Class 11 & 12 Computer Science (ICS)</option>
+                    <option value="Pre-Medical">Pre-Medical</option>
+                    <option value="Pre-Engineering">Pre-Engineering</option>
+                    <option value="Computer Science">Computer Science</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Staff Photograph (faculty-photos bucket)
+                    Section (A–E)
+                  </label>
+                  <select
+                    value={facultySection}
+                    onChange={(e) => setFacultySection(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
+                  >
+                    <option value="Section A">Section A</option>
+                    <option value="Section B">Section B</option>
+                    <option value="Section C">Section C</option>
+                    <option value="Section D">Section D</option>
+                    <option value="Section E">Section E</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Photo (faculty-photos bucket)
                   </label>
                   <input
                     type="file"
@@ -1004,32 +1247,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <h4 className="font-display font-bold text-lg text-slate-900 dark:text-white">
               Faculty Members Directory ({facultyList.length})
             </h4>
-            <div className="divide-y divide-slate-100 dark:divide-slate-800">
-              {facultyList.map((f) => (
-                <div key={f.id} className="py-3.5 flex items-center justify-between text-xs sm:text-sm">
-                  <div>
-                    <div className="font-bold text-slate-900 dark:text-white">{f.name}</div>
-                    <div className="text-xs text-slate-400">
-                      {f.role} • {f.subject || f.qualification}
+            {facultyList.length === 0 ? (
+              <div className="text-center py-8 text-xs text-slate-500">No faculty members found. Add one above.</div>
+            ) : (
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                {facultyList.map((f) => (
+                  <div key={f.id} className="py-3.5 flex items-center justify-between text-xs sm:text-sm">
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-white">{f.name}</div>
+                      <div className="text-xs text-slate-400">
+                        {f.role} • {f.subject || f.qualification}
+                      </div>
                     </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeleteFaculty(f.id)}
+                      className="text-rose-500 hover:text-rose-600"
+                      title="Delete Faculty Profile"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleDeleteFaculty(f.id)}
-                    className="text-rose-500 hover:text-rose-600"
-                    title="Delete Faculty Profile"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* TAB 4: Gallery Management (Real CRUD) */}
+      {/* TAB 4: Gallery Management (Real CRUD with explicit upload handling) */}
       {activeAdminTab === "gallery" && (
         <div className="space-y-6">
           <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-sm space-y-6">
@@ -1122,32 +1369,169 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <h4 className="font-display font-bold text-lg text-slate-900 dark:text-white">
               Media Archive ({galleryList.length})
             </h4>
-            <div className="divide-y divide-slate-100 dark:divide-slate-800">
-              {galleryList.map((item) => (
-                <div key={item.id} className="py-3.5 flex items-center justify-between text-xs sm:text-sm">
-                  <div>
-                    <div className="font-bold text-slate-900 dark:text-white">{item.title}</div>
-                    <div className="text-xs text-slate-400">
-                      {item.category} • {item.date}
+            {galleryList.length === 0 ? (
+              <div className="text-center py-8 text-xs text-slate-500">No media photographs found. Upload one above.</div>
+            ) : (
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                {galleryList.map((item) => (
+                  <div key={item.id} className="py-3.5 flex items-center justify-between text-xs sm:text-sm">
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-white">{item.title}</div>
+                      <div className="text-xs text-slate-400">
+                        {item.category} • {item.date}
+                      </div>
                     </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeleteGallery(item.id)}
+                      className="text-rose-500 hover:text-rose-600"
+                      title="Delete Media"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleDeleteGallery(item.id)}
-                    className="text-rose-500 hover:text-rose-600"
-                    title="Delete Media"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* TAB 5: Accounts & Auth Provisioning Manager */}
+      {/* TAB 5: Timetable Management (D2: Section Timetable Image Manager) */}
+      {activeAdminTab === "timetables" && (
+        <div className="space-y-6">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-sm space-y-6">
+            <div>
+              <h4 className="font-display font-bold text-xl text-slate-900 dark:text-white">
+                Upload Section Timetable Schedule Image
+              </h4>
+              <p className="text-xs text-slate-500 mt-1">
+                Upload the official approved schedule image for any section. This will be displayed directly in the logged-in student&apos;s portal.
+              </p>
+            </div>
+
+            <form onSubmit={handleUploadTimetable} className="space-y-4 max-w-2xl">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Academic Discipline *
+                  </label>
+                  <select
+                    value={ttDiscipline}
+                    onChange={(e) => setTtDiscipline(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
+                  >
+                    <option value="Pre-Medical">Pre-Medical</option>
+                    <option value="Pre-Engineering">Pre-Engineering</option>
+                    <option value="Computer Science">Computer Science</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Class Level *
+                  </label>
+                  <select
+                    value={ttClassLevel}
+                    onChange={(e) => setTtClassLevel(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
+                  >
+                    <option value="11th">Class 11 (HSSC Part-I)</option>
+                    <option value="12th">Class 12 (HSSC Part-II)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Section (A–E) *
+                  </label>
+                  <select
+                    value={ttSection}
+                    onChange={(e) => setTtSection(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
+                  >
+                    <option value="Section A">Section A</option>
+                    <option value="Section B">Section B</option>
+                    <option value="Section C">Section C</option>
+                    <option value="Section D">Section D</option>
+                    <option value="Section E">Section E</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Timetable Image File (PNG / JPEG) *
+                </label>
+                <input
+                  type="file"
+                  required
+                  accept="image/*"
+                  onChange={(e) => setTtImageFile(e.target.files?.[0] || null)}
+                  className="w-full text-xs text-slate-500 file:mr-2 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-medical-50 file:text-medical-700 dark:file:bg-medical-950 dark:file:text-medical-300 cursor-pointer"
+                />
+              </div>
+
+              <Button type="submit" variant="primary" size="md" disabled={isSavingTimetable} className="gap-2">
+                {isSavingTimetable ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                <span>{isSavingTimetable ? "Uploading to Storage..." : "Upload & Save Section Timetable"}</span>
+              </Button>
+            </form>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-sm space-y-4">
+            <h4 className="font-display font-bold text-lg text-slate-900 dark:text-white">
+              Uploaded Section Schedules ({timetablesList.length})
+            </h4>
+
+            {timetablesList.length === 0 ? (
+              <div className="text-center py-8 text-xs text-slate-500">
+                No section timetables uploaded yet. Upload one above.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {timetablesList.map((tt, idx) => (
+                  <div
+                    key={idx}
+                    className="border border-slate-200 dark:border-slate-700 rounded-2xl p-4 bg-slate-50/50 dark:bg-slate-800/40 space-y-3"
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="font-bold text-sm text-slate-900 dark:text-white">
+                          {tt.class_level} {tt.discipline}
+                        </div>
+                        <div className="text-xs text-medical-600 dark:text-medical-400 font-semibold">{tt.section}</div>
+                      </div>
+                      <Badge variant="medical" size="sm">Active</Badge>
+                    </div>
+
+                    <div className="relative h-32 w-full rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-black/5">
+                      <Image
+                        src={tt.image_url}
+                        alt="Section Timetable"
+                        fill
+                        className="object-cover"
+                      />
+                    </div>
+
+                    <a
+                      href={tt.image_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block text-center text-xs font-bold text-medical-600 hover:underline"
+                    >
+                      View Full Schedule Image →
+                    </a>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 6: Accounts & Auth Provisioning Manager (D1, D4, D7) */}
       {activeAdminTab === "accounts" && (
         <div className="space-y-8">
           {/* Temporary Password Announcement Banner */}
@@ -1208,7 +1592,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           )}
 
-          {/* Account Creation Form */}
+          {/* Account Creation Form with D1 (Section Dropdown) */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-sm space-y-6">
             <div>
               <h4 className="font-display font-bold text-xl text-slate-900 dark:text-white">
@@ -1277,47 +1661,57 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
 
-              {accountRole === "student" && (
+              {/* D1: Section Dropdown (A–E) for Students and Teachers */}
+              {(accountRole === "student" || accountRole === "teacher") && (
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Academic Discipline
-                    </label>
-                    <select
-                      value={accountDiscipline}
-                      onChange={(e) => setAccountDiscipline(e.target.value as any)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
-                    >
-                      <option value="Pre-Medical">Pre-Medical</option>
-                      <option value="Pre-Engineering">Pre-Engineering</option>
-                      <option value="Computer Science">Computer Science (ICS)</option>
-                    </select>
-                  </div>
+                  {accountRole === "student" && (
+                    <>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Academic Discipline
+                        </label>
+                        <select
+                          value={accountDiscipline}
+                          onChange={(e) => setAccountDiscipline(e.target.value as any)}
+                          className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
+                        >
+                          <option value="Pre-Medical">Pre-Medical</option>
+                          <option value="Pre-Engineering">Pre-Engineering</option>
+                          <option value="Computer Science">Computer Science (ICS)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Class Level
+                        </label>
+                        <select
+                          value={accountClassLevel}
+                          onChange={(e) => setAccountClassLevel(e.target.value)}
+                          className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
+                        >
+                          <option value="11th">Class 11 (HSSC Part-I)</option>
+                          <option value="12th">Class 12 (HSSC Part-II)</option>
+                        </select>
+                      </div>
+                    </>
+                  )}
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Class Level
+                      Assigned Section (A–E) *
                     </label>
                     <select
-                      value={accountClassLevel}
-                      onChange={(e) => setAccountClassLevel(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
-                    >
-                      <option value="11th">Class 11 (HSSC Part-I)</option>
-                      <option value="12th">Class 12 (HSSC Part-II)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Section
-                    </label>
-                    <input
-                      placeholder="Section A"
                       value={accountSection}
                       onChange={(e) => setAccountSection(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
-                    />
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white font-semibold"
+                    >
+                      <option value="Section A">Section A</option>
+                      <option value="Section B">Section B</option>
+                      <option value="Section C">Section C</option>
+                      <option value="Section D">Section D</option>
+                      <option value="Section E">Section E</option>
+                    </select>
                   </div>
                 </div>
               )}
@@ -1363,15 +1757,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </form>
           </div>
 
-          {/* Active Accounts Table with Password Reset Action */}
+          {/* Active Accounts Table with D4 (Assign Classes) and D7 (Delete Account) */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-sm space-y-4">
             <div className="flex items-center justify-between">
               <div>
                 <h4 className="font-display font-bold text-xl text-slate-900 dark:text-white">
-                  Active User Profiles & Password Management
+                  Active User Profiles & Access Management
                 </h4>
                 <p className="text-xs text-slate-500">
-                  Manage accounts and generate emergency temporary passwords for students/parents.
+                  Manage accounts, configure teacher class allocations, reset passwords, or delete credentials.
                 </p>
               </div>
               <Button
@@ -1393,7 +1787,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <th className="py-3 px-4 rounded-l-xl">Roll ID</th>
                       <th className="py-3 px-4">Full Name</th>
                       <th className="py-3 px-4">Role</th>
-                      <th className="py-3 px-4">Discipline / Group</th>
+                      <th className="py-3 px-4">Discipline / Section</th>
                       <th className="py-3 px-4">Password Status</th>
                       <th className="py-3 px-4 rounded-r-xl text-right">Actions</th>
                     </tr>
@@ -1408,12 +1802,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           {p.full_name}
                         </td>
                         <td className="py-3 px-4">
-                          <Badge variant={p.role === "admin" ? "gold" : "medical"} size="sm">
+                          <Badge variant={p.role === "admin" ? "gold" : p.role === "teacher" ? "outline" : "medical"} size="sm">
                             {p.role}
                           </Badge>
                         </td>
                         <td className="py-3 px-4 text-slate-500">
-                          {p.discipline || "—"} {p.section ? `(${p.section})` : ""}
+                          {p.role === "teacher" ? (
+                            <span className="text-xs font-semibold text-medical-600 dark:text-medical-400">
+                              {(p.classes_taught?.length || 0)} section(s) assigned
+                            </span>
+                          ) : (
+                            <span>{p.discipline || "—"} {p.section ? `(${p.section})` : ""}</span>
+                          )}
                         </td>
                         <td className="py-3 px-4">
                           {p.must_change_password ? (
@@ -1422,7 +1822,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <span className="text-[11px] font-medium text-emerald-600">Permanent Password Set</span>
                           )}
                         </td>
-                        <td className="py-3 px-4 text-right">
+                        <td className="py-3 px-4 text-right space-x-1">
+                          {/* D4: Teacher Class Allocation */}
+                          {p.role === "teacher" && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openTeacherClassManager(p)}
+                              className="gap-1 text-[11px] py-1 px-2.5"
+                              title="Assign classes and sections"
+                            >
+                              <Layers className="w-3 h-3 text-medical-500" />
+                              <span>Assign Sections</span>
+                            </Button>
+                          )}
+
+                          {/* Reset Password */}
                           <Button
                             variant="outline"
                             size="sm"
@@ -1431,7 +1846,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             className="gap-1 text-[11px] py-1 px-2.5"
                           >
                             <KeyRound className="w-3 h-3 text-gold-500" />
-                            <span>{resettingUserId === p.id ? "Resetting..." : "Reset Password"}</span>
+                            <span>{resettingUserId === p.id ? "..." : "Reset"}</span>
+                          </Button>
+
+                          {/* D7: Delete Portal Account */}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={deletingUserId === p.id}
+                            onClick={() => handleDeleteAccount(p.id, p.roll_number)}
+                            className="text-rose-500 hover:text-rose-600 py-1 px-2 text-[11px]"
+                            title="Delete User Account"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
                           </Button>
                         </td>
                       </tr>
@@ -1445,10 +1872,121 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             )}
           </div>
+
+          {/* D4: Teacher Section Allocation Modal */}
+          {editingTeacher && (
+            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 max-w-xl w-full shadow-2xl space-y-6">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h4 className="font-display font-bold text-xl text-slate-900 dark:text-white">
+                      Assign Classes & Sections
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Teacher: <strong className="text-slate-900 dark:text-white">{editingTeacher.full_name}</strong> ({editingTeacher.roll_number})
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setEditingTeacher(null)}
+                    className="p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Add new allocation */}
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3">
+                  <div className="text-xs font-bold text-slate-700 dark:text-slate-300">Add New Allocation:</div>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <select
+                      value={newClassGroup}
+                      onChange={(e) => setNewClassGroup(e.target.value)}
+                      className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700"
+                    >
+                      <option value="Pre-Medical">Pre-Medical</option>
+                      <option value="Pre-Engineering">Pre-Engineering</option>
+                      <option value="Computer Science">Computer Science</option>
+                    </select>
+
+                    <select
+                      value={newClassLevel}
+                      onChange={(e) => setNewClassLevel(e.target.value)}
+                      className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700"
+                    >
+                      <option value="11th">11th</option>
+                      <option value="12th">12th</option>
+                    </select>
+
+                    <select
+                      value={newClassSection}
+                      onChange={(e) => setNewClassSection(e.target.value)}
+                      className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700"
+                    >
+                      <option value="Section A">Section A</option>
+                      <option value="Section B">Section B</option>
+                      <option value="Section C">Section C</option>
+                      <option value="Section D">Section D</option>
+                      <option value="Section E">Section E</option>
+                    </select>
+                  </div>
+
+                  <Button size="sm" variant="outline" onClick={handleAddClassAssignment} className="text-xs gap-1">
+                    <Plus className="w-3.5 h-3.5" /> Add Section Assignment
+                  </Button>
+                </div>
+
+                {/* Currently Assigned Sections List */}
+                <div className="space-y-2">
+                  <div className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Allocated Classes ({teacherAssignedClasses.length}):
+                  </div>
+
+                  {teacherAssignedClasses.length === 0 ? (
+                    <div className="text-xs text-slate-400 italic py-2">No sections assigned to this teacher yet.</div>
+                  ) : (
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                      {teacherAssignedClasses.map((cls, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs bg-white dark:bg-slate-900"
+                        >
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">
+                            {cls.classLevel} {cls.group} — <strong className="text-medical-600 dark:text-medical-400">{cls.section}</strong>
+                          </span>
+                          <button
+                            onClick={() => handleRemoveClassAssignment(idx)}
+                            className="text-rose-500 hover:text-rose-600 p-1"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <Button variant="ghost" size="sm" onClick={() => setEditingTeacher(null)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    disabled={isSavingClasses}
+                    onClick={handleSaveTeacherClasses}
+                    className="gap-1.5"
+                  >
+                    {isSavingClasses ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                    <span>{isSavingClasses ? "Saving Changes..." : "Save Assigned Sections"}</span>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* TAB 6: Admit Card Generator (Admin-Only Tool) */}
+      {/* TAB 7: Admit Card Generator (Admin-Only Tool) */}
       {activeAdminTab === "admit_cards" && (
         <div className="space-y-8">
           <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-sm space-y-6 no-print">

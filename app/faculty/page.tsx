@@ -31,9 +31,9 @@ export default function FacultyPage() {
           .select("*")
           .order("created_at", { ascending: false });
 
-        if (data && !error && data.length > 0) {
+        if (!error) {
           setStaffList(
-            data.map((f: any) => ({
+            (data || []).map((f: any) => ({
               id: f.id,
               name: f.name,
               role: f.role,
