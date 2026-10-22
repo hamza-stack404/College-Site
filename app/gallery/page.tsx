@@ -1,50 +1,64 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import { PageHero } from "@/components/shared/PageHero";
 import { SectionHeader } from "@/components/shared/SectionHeader";
 import { Badge } from "@/components/ui/Badge";
 import { Lightbox } from "@/components/ui/Lightbox";
-import { galleryData } from "@/lib/data/gallery";
+import { CardSkeleton } from "@/components/ui/Skeleton";
+import { Button } from "@/components/ui/Button";
 import { GalleryItem } from "@/lib/types";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";
-import { Eye, Camera, Play, Sparkles } from "lucide-react";
+import { Eye, Camera, Play, Sparkles, RefreshCw, AlertCircle, Image as ImageIcon } from "lucide-react";
 
 export default function GalleryPage() {
-  const [galleryItems, setGalleryItems] = useState<GalleryItem[]>(galleryData);
+  const [galleryItems, setGalleryItems] = useState<GalleryItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
-  useEffect(() => {
-    async function fetchGalleryItems() {
-      if (!isSupabaseConfigured) return;
-      try {
-        const { data, error } = await supabase
-          .from("gallery")
-          .select("*")
-          .order("date", { ascending: false });
-
-        if (!error) {
-          setGalleryItems(
-            (data || []).map((g: any) => ({
-              id: g.id,
-              title: g.title,
-              category: g.category,
-              caption: g.caption || "",
-              date: g.date || "",
-              type: (g.media_type || g.type || "image") as "image" | "video",
-              mediaUrl: g.media_url,
-              thumbnailUrl: g.thumbnail_url || g.media_url,
-            }))
-          );
-        }
-      } catch (err) {
-        console.warn("Could not fetch gallery items from Supabase:", err);
-      }
+  const fetchGalleryItems = useCallback(async () => {
+    if (!isSupabaseConfigured) {
+      setIsLoading(false);
+      return;
     }
-    fetchGalleryItems();
+    try {
+      setIsLoading(true);
+      setError(null);
+      const { data, error: sbError } = await supabase
+        .from("gallery")
+        .select("*")
+        .order("date", { ascending: false });
+
+      if (sbError) {
+        throw sbError;
+      }
+
+      setGalleryItems(
+        (data || []).map((g: any) => ({
+          id: g.id,
+          title: g.title,
+          category: g.category,
+          caption: g.caption || "",
+          date: g.date || "",
+          type: (g.media_type || g.type || "image") as "image" | "video",
+          mediaUrl: g.media_url,
+          thumbnailUrl: g.thumbnail_url || g.media_url,
+        }))
+      );
+    } catch (err: any) {
+      console.error("Could not fetch gallery items from Supabase:", err);
+      setError(err?.message || "Failed to load gallery items. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchGalleryItems();
+  }, [fetchGalleryItems]);
 
   const categories = [
     { id: "all", label: "All Media" },
@@ -78,7 +92,7 @@ export default function GalleryPage() {
             badgeVariant="gold"
             title="Moments of Rigor,"
             titleHighlight="Discovery & Triumph"
-            subtitle="Click on any photograph to view high-resolution imagery and detailed laboratory specifications."
+            subtitle="Click on any photograph or video to view high-resolution imagery and detailed specifications."
             align="center"
           />
 
@@ -99,47 +113,101 @@ export default function GalleryPage() {
             ))}
           </div>
 
-          {/* Media Masonry Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredItems.map((item, idx) => (
-              <div
-                key={item.id}
-                onClick={() => setLightboxIndex(idx)}
-                className="group relative h-72 rounded-3xl overflow-hidden cursor-pointer shadow-sm hover:shadow-2xl transition-all duration-300 border border-slate-200 dark:border-slate-800 bg-slate-900"
-              >
-                <Image
-                  src={item.thumbnailUrl}
-                  alt={item.title}
-                  fill
-                  className="object-cover group-hover:scale-110 transition-transform duration-700"
-                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-navy-950 via-black/30 to-transparent opacity-80 group-hover:opacity-90 transition-opacity" />
-
-                {/* Badge on Top Left */}
-                <div className="absolute top-4 left-4 z-10">
-                  <Badge variant="medical" size="sm">
-                    {item.category}
-                  </Badge>
+          {isLoading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="h-72 rounded-3xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 flex flex-col justify-between animate-pulse">
+                  <div className="w-20 h-6 bg-slate-200 dark:bg-slate-800 rounded-full" />
+                  <div className="space-y-2">
+                    <div className="w-3/4 h-5 bg-slate-200 dark:bg-slate-800 rounded" />
+                    <div className="w-1/2 h-4 bg-slate-200 dark:bg-slate-800 rounded" />
+                  </div>
                 </div>
-
-                {/* Hover Eye Icon */}
-                <div className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100">
-                  <Eye className="w-4 h-4" />
-                </div>
-
-                {/* Bottom Title & Caption */}
-                <div className="absolute bottom-4 left-4 right-4 text-white z-10">
-                  <h4 className="font-display font-bold text-base sm:text-lg leading-snug">
-                    {item.title}
-                  </h4>
-                  <p className="text-xs text-slate-300 mt-1 line-clamp-1 opacity-90">
-                    {item.caption}
-                  </p>
-                </div>
+              ))}
+            </div>
+          ) : error ? (
+            <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 rounded-3xl p-8 text-center max-w-lg mx-auto space-y-4">
+              <div className="w-12 h-12 bg-red-100 dark:bg-red-900/50 rounded-2xl flex items-center justify-center text-red-600 dark:text-red-400 mx-auto">
+                <AlertCircle className="w-6 h-6" />
               </div>
-            ))}
-          </div>
+              <h3 className="font-display font-bold text-lg text-red-900 dark:text-red-300">
+                Unable to load gallery
+              </h3>
+              <p className="text-xs sm:text-sm text-red-700 dark:text-red-400">
+                {error}
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchGalleryItems}
+                className="gap-2 mx-auto cursor-pointer"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>Try Again</span>
+              </Button>
+            </div>
+          ) : filteredItems.length === 0 ? (
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-12 text-center max-w-md mx-auto space-y-4 shadow-sm">
+              <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center text-slate-400 mx-auto">
+                <ImageIcon className="w-6 h-6" />
+              </div>
+              <h3 className="font-display font-bold text-lg text-slate-900 dark:text-white">
+                Nothing published yet
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                {selectedCategory === "all"
+                  ? "There are no media items in the gallery yet."
+                  : `No media found under category "${selectedCategory}".`}
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredItems.map((item, idx) => (
+                <div
+                  key={item.id}
+                  onClick={() => setLightboxIndex(idx)}
+                  className="group relative h-72 rounded-3xl overflow-hidden cursor-pointer shadow-sm hover:shadow-2xl transition-all duration-300 border border-slate-200 dark:border-slate-800 bg-slate-900"
+                >
+                  <Image
+                    src={item.thumbnailUrl}
+                    alt={item.title}
+                    fill
+                    className="object-cover group-hover:scale-110 transition-transform duration-700"
+                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-navy-950 via-black/30 to-transparent opacity-80 group-hover:opacity-90 transition-opacity" />
+
+                  {/* Badge & Type on Top Left */}
+                  <div className="absolute top-4 left-4 z-10 flex items-center gap-1.5">
+                    <Badge variant="medical" size="sm">
+                      {item.category}
+                    </Badge>
+                    {item.type === "video" && (
+                      <Badge variant="gold" size="sm" className="flex items-center gap-1">
+                        <Play className="w-3 h-3 fill-current" />
+                        <span>Video</span>
+                      </Badge>
+                    )}
+                  </div>
+
+                  {/* Hover Eye / Play Icon */}
+                  <div className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100">
+                    {item.type === "video" ? <Play className="w-4 h-4 fill-white" /> : <Eye className="w-4 h-4" />}
+                  </div>
+
+                  {/* Bottom Title & Caption */}
+                  <div className="absolute bottom-4 left-4 right-4 text-white z-10">
+                    <h4 className="font-display font-bold text-base sm:text-lg leading-snug">
+                      {item.title}
+                    </h4>
+                    <p className="text-xs text-slate-300 mt-1 line-clamp-1 opacity-90">
+                      {item.caption}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

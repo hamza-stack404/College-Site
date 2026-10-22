@@ -4,10 +4,6 @@ import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { initialNoticesData } from "@/lib/data/notices";
-import { initialAnnouncementsData } from "@/lib/data/announcements";
-import { facultyData } from "@/lib/data/faculty";
-import { galleryData } from "@/lib/data/gallery";
 import { NoticeItem, PortalUserRole, StaffMember, GalleryItem } from "@/lib/types";
 import {
   Plus,
@@ -32,6 +28,7 @@ import {
   Calendar,
   Layers,
   X,
+  Search,
 } from "lucide-react";
 import {
   createNoticeAction,
@@ -48,7 +45,10 @@ import {
   getAppSettingAction,
   updateAppSettingAction,
   upsertTimetableAction,
+  deleteTimetableAction,
   updateTeacherClassesAction,
+  updateTeacherAction,
+  lookupStudentAction,
 } from "@/lib/supabase/actions";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";
 import { uploadFileToStorage } from "@/lib/supabase/storage";
@@ -67,6 +67,7 @@ interface ProfileRecord {
   discipline?: string;
   section?: string;
   category?: string;
+  subject?: string;
   classes_taught?: { group: string; classLevel: string; section: string }[];
   must_change_password?: boolean;
 }
@@ -87,6 +88,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [activeAdminTab, setActiveAdminTab] = useState<
     "notices" | "announcements" | "faculty" | "gallery" | "timetables" | "accounts" | "admit_cards"
   >("notices");
+
+  // Current admin session user ID (for self-deletion protection)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   // Gate controls (Supabase-backed settings)
   const [isMarksEntryOpen, setIsMarksEntryOpen] = useState(propMarksEntryOpen);
@@ -114,10 +118,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return data.session?.access_token || null;
   };
 
-  // Load app settings on mount
+  // Load app settings and current admin ID on mount
   useEffect(() => {
     async function loadSettings() {
       try {
+        const { data: authData } = await supabase.auth.getUser();
+        if (authData?.user) {
+          setCurrentUserId(authData.user.id);
+        }
+
         const marksRes = await getAppSettingAction("marks_entry_open", true);
         if (typeof marksRes?.value === "boolean") setIsMarksEntryOpen(marksRes.value);
 
@@ -166,7 +175,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   /* =========================================================================
      1. Notices Management
      ========================================================================= */
-  const [noticesList, setNoticesList] = useState<NoticeItem[]>(initialNoticesData);
+  const [noticesList, setNoticesList] = useState<NoticeItem[]>([]);
   const [newNoticeTitle, setNewNoticeTitle] = useState("");
   const [newNoticeCategory, setNewNoticeCategory] = useState<any>("General Notice");
   const [newNoticeDesc, setNewNoticeDesc] = useState("");
@@ -237,7 +246,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   /* =========================================================================
      2. Announcements Management (Real CRUD)
      ========================================================================= */
-  const [announcementsList, setAnnouncementsList] = useState(initialAnnouncementsData);
+  const [announcementsList, setAnnouncementsList] = useState<any[]>([]);
   const [newAnnHeading, setNewAnnHeading] = useState("");
   const [newAnnDesc, setNewAnnDesc] = useState("");
   const [newAnnDate, setNewAnnDate] = useState(new Date().toISOString().split("T")[0]);
@@ -272,22 +281,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       let imageUrl: string | null = null;
       if (annImageFile) {
-        const uploadRes = await uploadFileToStorage(annImageFile, "gallery-media");
+        const uploadRes = await uploadFileToStorage(annImageFile, "announcements");
         if (uploadRes.error || !uploadRes.url) {
           showNotification(`Banner upload failed: ${uploadRes.error || "Storage error"}`, "error");
           setIsPublishingAnn(false);
           return;
         }
         imageUrl = uploadRes.url;
-      } else {
-        imageUrl = "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=1200&q=80";
       }
 
       const res = await createAnnouncementAction(
         {
           heading: newAnnHeading,
           description: newAnnDesc,
-          image_url: imageUrl,
+          image_url: imageUrl || "",
           date: newAnnDate,
         },
         token
@@ -320,7 +327,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   /* =========================================================================
      3. Faculty Management (Real CRUD with explicit upload error handling)
      ========================================================================= */
-  const [facultyList, setFacultyList] = useState<StaffMember[]>(facultyData);
+  const [facultyList, setFacultyList] = useState<StaffMember[]>([]);
   const [facultyName, setFacultyName] = useState("");
   const [facultyRole, setFacultyRole] = useState("Subject Teacher");
   const [facultySubject, setFacultySubject] = useState("");
@@ -420,7 +427,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   /* =========================================================================
      4. Gallery Management (Real CRUD with explicit upload error handling)
      ========================================================================= */
-  const [galleryList, setGalleryList] = useState<GalleryItem[]>(galleryData);
+  const [galleryList, setGalleryList] = useState<GalleryItem[]>([]);
   const [galleryTitle, setGalleryTitle] = useState("");
   const [galleryCategory, setGalleryCategory] = useState("Medical Labs");
   const [galleryCaption, setGalleryCaption] = useState("");
@@ -475,7 +482,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         }
         mediaUrl = uploadRes.url;
       } else {
-        mediaUrl = "https://images.unsplash.com/photo-1521587760476-6c12a4b040da?auto=format&fit=crop&w=1200&q=80";
+        showNotification("Please select a media file to upload for the gallery.", "error");
+        setIsSavingGallery(false);
+        return;
       }
 
       const res = await createGalleryItemAction(
@@ -523,6 +532,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [ttImageFile, setTtImageFile] = useState<File | null>(null);
   const [isSavingTimetable, setIsSavingTimetable] = useState(false);
   const [timetablesList, setTimetablesList] = useState<TimetableRecord[]>([]);
+  const [deletingTimetableId, setDeletingTimetableId] = useState<string | null>(null);
 
   const fetchTimetables = async () => {
     if (!isSupabaseConfigured) return;
@@ -584,6 +594,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  const handleDeleteTimetable = async (id: string) => {
+    if (!id || !window.confirm("Are you sure you want to remove this timetable?")) return;
+    setDeletingTimetableId(id);
+    try {
+      const token = await getAccessToken();
+      if (!token) return;
+      const res = await deleteTimetableAction(id, token);
+      if (res.success) {
+        setTimetablesList(timetablesList.filter((tt) => tt.id !== id));
+        showNotification("Timetable removed successfully.");
+      } else {
+        showNotification(res.message || "Failed to remove timetable.", "error");
+      }
+    } finally {
+      setDeletingTimetableId(null);
+    }
+  };
+
   /* =========================================================================
      6. User Accounts & Password & Teacher Sections (D1, D4, D7)
      ========================================================================= */
@@ -596,6 +624,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [accountSection, setAccountSection] = useState("Section A");
   const [accountCategory, setAccountCategory] = useState<"Civilian" | "Armed Forces">("Civilian");
   const [accountContactPhone, setAccountContactPhone] = useState("");
+  const [accountTeacherSubject, setAccountTeacherSubject] = useState("");
+
+  // Parent lookup state
+  const [isLookingUpStudent, setIsLookingUpStudent] = useState(false);
+  const [parentLookedUpStudent, setParentLookedUpStudent] = useState<{ full_name: string; roll_number: string } | null>(null);
+  const [parentLookupError, setParentLookupError] = useState<string | null>(null);
+
+  const handleLookupStudent = async () => {
+    if (!accountLoginId.trim()) {
+      setParentLookupError("Enter the student's roll number first.");
+      return;
+    }
+    setIsLookingUpStudent(true);
+    setParentLookedUpStudent(null);
+    setParentLookupError(null);
+    try {
+      const token = await getAccessToken();
+      if (!token) { setParentLookupError("Session expired."); return; }
+      const res = await lookupStudentAction(accountLoginId.trim(), token);
+      if (res.success && res.student) {
+        setParentLookedUpStudent(res.student as { full_name: string; roll_number: string });
+      } else {
+        setParentLookupError(res.message || "Student not found.");
+      }
+    } catch {
+      setParentLookupError("Lookup failed. Please try again.");
+    } finally {
+      setIsLookingUpStudent(false);
+    }
+  };
 
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
   const [accountError, setAccountError] = useState<string | null>(null);
@@ -667,6 +725,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         section: accountRole === "student" || accountRole === "teacher" ? accountSection : undefined,
         category: accountCategory,
         contactPhone: accountContactPhone,
+        subject: accountRole === "teacher" ? (accountTeacherSubject.trim() || undefined) : undefined,
       });
 
       if (!res.success) {
@@ -686,6 +745,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         setAccountFullName("");
         setAccountFatherName("");
         setAccountContactPhone("");
+        setAccountTeacherSubject("");
+        setParentLookedUpStudent(null);
+        setParentLookupError(null);
         fetchProfiles();
       }
     } catch (err: any) {
@@ -734,6 +796,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // D7: Delete Portal Account
   const handleDeleteAccount = async (userId: string, rollNumber: string) => {
+    if (currentUserId && currentUserId === userId) {
+      showNotification("You cannot delete your own admin account.", "error");
+      return;
+    }
+
     if (!window.confirm(`Are you sure you want to permanently delete account ${rollNumber}? This cannot be undone.`)) {
       return;
     }
@@ -1493,7 +1560,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {timetablesList.map((tt, idx) => (
                   <div
-                    key={idx}
+                    key={tt.id || idx}
                     className="border border-slate-200 dark:border-slate-700 rounded-2xl p-4 bg-slate-50/50 dark:bg-slate-800/40 space-y-3"
                   >
                     <div className="flex justify-between items-start">
@@ -1503,7 +1570,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </div>
                         <div className="text-xs text-medical-600 dark:text-medical-400 font-semibold">{tt.section}</div>
                       </div>
-                      <Badge variant="medical" size="sm">Active</Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="medical" size="sm">Active</Badge>
+                        {tt.id && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteTimetable(tt.id!)}
+                            disabled={deletingTimetableId === tt.id}
+                            className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors disabled:opacity-50"
+                            title="Remove timetable"
+                          >
+                            {deletingTimetableId === tt.id
+                              ? <Loader2 className="w-4 h-4 animate-spin" />
+                              : <Trash2 className="w-4 h-4" />}
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     <div className="relative h-32 w-full rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-black/5">
@@ -1611,7 +1693,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </label>
                   <select
                     value={accountRole}
-                    onChange={(e) => setAccountRole(e.target.value as PortalUserRole)}
+                    onChange={(e) => {
+                      setAccountRole(e.target.value as PortalUserRole);
+                      setParentLookedUpStudent(null);
+                      setParentLookupError(null);
+                    }}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
                   >
                     <option value="student">Student Account</option>
@@ -1622,26 +1708,60 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Login ID / Roll Number *
+                    {accountRole === "parent" ? "Child's Roll Number / ID *" : accountRole === "teacher" ? "Teacher Login ID *" : "Login ID / Roll Number *"}
                   </label>
-                  <input
-                    required
-                    placeholder={accountRole === "teacher" ? "TCH-004" : "BCH-2026-0102"}
-                    value={accountLoginId}
-                    onChange={(e) => setAccountLoginId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white font-mono"
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      required
+                      placeholder={accountRole === "teacher" ? "TCH-004" : "BCH-2026-0102"}
+                      value={accountLoginId}
+                      onChange={(e) => {
+                        setAccountLoginId(e.target.value);
+                        if (parentLookedUpStudent) setParentLookedUpStudent(null);
+                      }}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white font-mono"
+                    />
+                    {accountRole === "parent" && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleLookupStudent}
+                        disabled={isLookingUpStudent || !accountLoginId.trim()}
+                        className="gap-1.5 shrink-0 px-3 text-xs"
+                      >
+                        {isLookingUpStudent ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                        <span>Verify</span>
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
+
+              {/* Parent Student Lookup Confirmation Card */}
+              {accountRole === "parent" && parentLookedUpStudent && (
+                <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-2xl text-xs text-emerald-800 dark:text-emerald-200 flex items-center justify-between">
+                  <div>
+                    <span className="font-bold">Student Verified:</span> {parentLookedUpStudent.full_name} ({parentLookedUpStudent.roll_number})
+                  </div>
+                  <Badge variant="success" size="sm">Child Confirmed</Badge>
+                </div>
+              )}
+
+              {accountRole === "parent" && parentLookupError && (
+                <div className="p-3.5 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 rounded-2xl text-xs text-rose-700 dark:text-rose-300">
+                  {parentLookupError}
+                </div>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Full Name *
+                    {accountRole === "parent" ? "Parent's Full Name *" : "Full Name *"}
                   </label>
                   <input
                     required
-                    placeholder="e.g. Zaid Ahmed"
+                    placeholder={accountRole === "parent" ? "e.g. Tariq Mehmood" : "e.g. Zaid Ahmed"}
                     value={accountFullName}
                     onChange={(e) => setAccountFullName(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
@@ -1660,6 +1780,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   />
                 </div>
               </div>
+
+              {/* Teacher Subject Field */}
+              {accountRole === "teacher" && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Teaching Subject (Locks exam marks entry) *
+                  </label>
+                  <input
+                    required
+                    placeholder="e.g. Physics, Chemistry, Mathematics, Urdu, English, Biology, Computer Science"
+                    value={accountTeacherSubject}
+                    onChange={(e) => setAccountTeacherSubject(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    This teacher will only be permitted to enter and edit exam marks for this specific subject.
+                  </p>
+                </div>
+              )}
 
               {/* D1: Section Dropdown (A–E) for Students and Teachers */}
               {(accountRole === "student" || accountRole === "teacher") && (
@@ -1853,10 +1992,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <Button
                             variant="ghost"
                             size="sm"
-                            disabled={deletingUserId === p.id}
+                            disabled={deletingUserId === p.id || currentUserId === p.id}
                             onClick={() => handleDeleteAccount(p.id, p.roll_number)}
-                            className="text-rose-500 hover:text-rose-600 py-1 px-2 text-[11px]"
-                            title="Delete User Account"
+                            className="text-rose-500 hover:text-rose-600 disabled:opacity-30 disabled:cursor-not-allowed py-1 px-2 text-[11px]"
+                            title={currentUserId === p.id ? "Cannot delete your own active admin account" : "Delete User Account"}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </Button>

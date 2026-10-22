@@ -15,7 +15,6 @@ export const intermediateGroupsData: IntermediateGroup[] = [
       forces: FEE_TIERS.monthlyTuition.forces,
     },
     admissionFee: FEE_TIERS.admissionFee,
-    scienceLabFee: FEE_TIERS.scienceLabMonthlyFee,
     image: "https://images.unsplash.com/photo-1579154204601-01588f351e67?auto=format&fit=crop&w=1200&q=80",
     description:
       "The Pre-Medical group is designed for aspiring doctors, dentists, and allied healthcare specialists. The curriculum rigorously covers Biology, Chemistry, Physics, and compulsory subjects under the FBISE Federal Board curriculum with hands-on laboratory practicals.",
@@ -78,7 +77,6 @@ export const intermediateGroupsData: IntermediateGroup[] = [
       forces: FEE_TIERS.monthlyTuition.forces,
     },
     admissionFee: FEE_TIERS.admissionFee,
-    scienceLabFee: FEE_TIERS.scienceLabMonthlyFee,
     image: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=1200&q=80",
     description:
       "The Pre-Engineering group provides a solid foundation in Advanced Mathematics, Physics, and Chemistry, preparing students for admission into top engineering and architecture institutions under the FBISE curriculum.",
@@ -136,7 +134,6 @@ export const intermediateGroupsData: IntermediateGroup[] = [
       forces: FEE_TIERS.monthlyTuition.forces,
     },
     admissionFee: FEE_TIERS.admissionFee,
-    scienceLabFee: FEE_TIERS.scienceLabMonthlyFee,
     image: "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=1200&q=80",
     description:
       "The ICS program equips students with computer programming fundamentals, database architecture, IT concepts, and mathematics in modern computer laboratories under the FBISE curriculum.",

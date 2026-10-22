@@ -17,9 +17,22 @@ export const COLLEGE_INFO = {
 export const FEE_TIERS = {
   admissionFee: 15000, // One-time upon Class 11 admission
   prospectusAndRegistrationFee: 1000,
-  scienceLabMonthlyFee: 1500,
   monthlyTuition: {
     civilian: 5500,
     forces: 3500, // Navy / Army / Airforce dependents
   },
+};
+
+export const EXAM_CONFIG = {
+  Assessment: { perPaperMarks: 50 },
+  // TODO(user): confirm per-paper marks for Send-up and Pre-Board
+  "Send-up": { perPaperMarks: null as number | null },
+  "Pre-Board": { perPaperMarks: null as number | null },
+};
+
+// TODO(user): fill in the 7 subjects for each group (Class 11). Do NOT invent subjects.
+export const EXAM_SUBJECTS: Record<"Pre-Medical" | "Pre-Engineering" | "Computer Science", string[]> = {
+  "Pre-Medical": [],
+  "Pre-Engineering": [],
+  "Computer Science": [],
 };

@@ -13,75 +13,6 @@ import { LogOut } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";
 import { getAppSettingAction } from "@/lib/supabase/actions";
 
-// NOTE: Full dashboard data-fetching (live timetable, fee records, examination marks from Supabase)
-// is a dedicated follow-up task. Current dashboards below receive structured mock props for UI layout
-// while the top Authenticated User Header reflects real authenticated Supabase user profile data.
-const mockStudent: StudentProfile = {
-  id: "BCH-2026-0101",
-  name: "Muhammad Hamza Khan",
-  fatherName: "Tariq Mahmood Khan",
-  group: "Pre-Medical",
-  classLevel: "11th",
-  section: "Section A",
-  category: "Civilian",
-  feeStatus: "Paid",
-  dueAmount: 0,
-  attendancePercentage: 94.5,
-  ptmTiming: "Saturday, Sep 05, 2026 at 10:30 AM (Room 12)",
-  timetable: [
-    {
-      day: "Monday – Thursday",
-      periods: [
-        { time: "08:15 – 09:00 AM", subject: "Biology", teacher: "Prof. Dr. Tariq Khan", room: "Room 101" },
-        { time: "09:00 – 09:45 AM", subject: "Chemistry", teacher: "Mrs. Naila Jabeen", room: "Room 101" },
-        { time: "09:45 – 10:30 AM", subject: "Physics", teacher: "Prof. Muhammad Asif", room: "Room 101" },
-        { time: "10:30 – 11:00 AM", subject: "Break & Zuhr Prayer", teacher: "College Mosque", room: "Masjid" },
-        { time: "11:00 – 12:30 PM", subject: "Biology / Chemistry Practical", teacher: "Lab In-Charge", room: "Bio Lab" },
-        { time: "12:30 – 01:15 PM", subject: "English Compulsory", teacher: "Prof. Salman Ahmed", room: "Room 101" },
-        { time: "01:15 – 02:00 PM", subject: "Urdu / Islamiat", teacher: "Dr. Muhammad Irfan", room: "Room 101" },
-      ],
-    },
-  ],
-  internalExamResults: [
-    {
-      examName: "1st Term Assessment",
-      examDate: "October 2026",
-      subjects: [
-        { name: "Biology", totalMarks: 100, obtainedMarks: 91, grade: "A-1" },
-        { name: "Chemistry", totalMarks: 100, obtainedMarks: 88, grade: "A-1" },
-        { name: "Physics", totalMarks: 100, obtainedMarks: 86, grade: "A-1" },
-        { name: "English", totalMarks: 100, obtainedMarks: 82, grade: "A" },
-        { name: "Urdu", totalMarks: 100, obtainedMarks: 85, grade: "A-1" },
-        { name: "Islamic Education", totalMarks: 50, obtainedMarks: 47, grade: "A-1" },
-      ],
-      totalObtained: 479,
-      totalMax: 550,
-      percentage: 87.09,
-    },
-  ],
-};
-
-const mockTeacher: TeacherProfile = {
-  id: "TCH-003",
-  name: "Mrs. Naila Jabeen",
-  subject: "Chemistry",
-  classesTaught: [
-    { group: "Pre-Medical", classLevel: "11th", section: "Section A" },
-    { group: "Pre-Engineering", classLevel: "11th", section: "Section A" },
-    { group: "Pre-Engineering", classLevel: "11th", section: "Section B" },
-  ],
-  timetable: [
-    {
-      day: "Daily",
-      periods: [
-        { time: "08:15 – 09:00 AM", class: "11th Pre-Medical (Sec A)", subject: "Chemistry Theory", room: "Room 101" },
-        { time: "09:00 – 09:45 AM", class: "11th Pre-Engineering (Sec A)", subject: "Chemistry Theory", room: "Room 102" },
-        { time: "11:00 – 12:30 PM", class: "11th Pre-Engineering (Sec B)", subject: "Chemistry Practical", room: "Chem Lab" },
-      ],
-    },
-  ],
-};
-
 function getInitials(name: string): string {
   if (!name) return "BC";
   const parts = name.trim().split(/\s+/);
@@ -93,9 +24,45 @@ export default function PortalPage() {
   const [activeRole, setActiveRole] = useState<PortalUserRole>("student");
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
   const [currentUserId, setCurrentUserId] = useState<string>("BCH-2026-0101");
-  const [currentUserFullName, setCurrentUserFullName] = useState<string>("Muhammad Hamza Khan");
+  const [currentUserFullName, setCurrentUserFullName] = useState<string>("College Scholar");
   const [userProfileData, setUserProfileData] = useState<any>(null);
+  const [childProfileData, setChildProfileData] = useState<any>(null);
   const [isMarksEntryOpen, setIsMarksEntryOpen] = useState<boolean>(true);
+
+  // Helper to fetch user's profile and, if parent, associated student
+  const loadProfile = async (userId: string) => {
+    if (!isSupabaseConfigured) return;
+    try {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id, roll_number, full_name, father_name, role, discipline, section, class_level, category, classes_taught, subject")
+        .eq("id", userId)
+        .single();
+
+      if (profile) {
+        setUserProfileData(profile);
+        if (profile.full_name) setCurrentUserFullName(profile.full_name);
+        if (profile.roll_number) setCurrentUserId(profile.roll_number);
+        if (profile.role) setActiveRole(profile.role as PortalUserRole);
+
+        // If parent, fetch the corresponding student record
+        if (profile.role === "parent" && profile.roll_number) {
+          const { data: studentRecord } = await supabase
+            .from("profiles")
+            .select("id, roll_number, full_name, father_name, role, discipline, section, class_level, category")
+            .eq("roll_number", profile.roll_number)
+            .eq("role", "student")
+            .maybeSingle();
+
+          if (studentRecord) {
+            setChildProfileData(studentRecord);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Profile fetch note:", err);
+    }
+  };
 
   // Restore authenticated session and settings on mount
   useEffect(() => {
@@ -109,22 +76,8 @@ export default function PortalPage() {
         if (!isSupabaseConfigured) return;
         const { data: sessionData } = await supabase.auth.getSession();
         if (sessionData.session?.user) {
-          const userId = sessionData.session.user.id;
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("id, roll_number, full_name, role, discipline, section, class_level, category, classes_taught")
-            .eq("id", userId)
-            .single();
-
-          if (profile) {
-            setCurrentUserId(profile.roll_number || "BCH-2026-0101");
-            setCurrentUserFullName(profile.full_name || "College Scholar");
-            setUserProfileData(profile);
-            if (profile.role) {
-              setActiveRole(profile.role as PortalUserRole);
-            }
-            setIsLoggedIn(true);
-          }
+          await loadProfile(sessionData.session.user.id);
+          setIsLoggedIn(true);
         }
       } catch (err) {
         console.error("Session verification error:", err);
@@ -143,16 +96,7 @@ export default function PortalPage() {
       try {
         const { data: userData } = await supabase.auth.getUser();
         if (userData.user) {
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("id, roll_number, full_name, role, discipline, section, class_level, category, classes_taught")
-            .eq("id", userData.user.id)
-            .single();
-          if (profile) {
-            setUserProfileData(profile);
-            if (profile.full_name) setCurrentUserFullName(profile.full_name);
-            if (profile.roll_number) setCurrentUserId(profile.roll_number);
-          }
+          await loadProfile(userData.user.id);
         }
       } catch (err) {
         console.warn("Profile fetch note:", err);
@@ -169,7 +113,52 @@ export default function PortalPage() {
         console.error("Sign out error:", err);
       }
     }
+    setUserProfileData(null);
+    setChildProfileData(null);
     setIsLoggedIn(false);
+  };
+
+  // Construct student profile for StudentDashboard
+  const studentProp: StudentProfile = {
+    id: userProfileData?.roll_number || currentUserId,
+    name: userProfileData?.full_name || currentUserFullName,
+    fatherName: userProfileData?.father_name || "",
+    group: (userProfileData?.discipline || "Pre-Medical") as any,
+    classLevel: (userProfileData?.class_level || "11th") as any,
+    section: userProfileData?.section || "Section A",
+    category: (userProfileData?.category || "Civilian") as any,
+    feeStatus: "Paid",
+    dueAmount: 0,
+    attendancePercentage: 100,
+    ptmTiming: "No meeting scheduled yet",
+    timetable: [],
+    internalExamResults: [],
+  };
+
+  // Construct child profile for ParentDashboard
+  const parentStudentProp: StudentProfile = {
+    id: childProfileData?.roll_number || userProfileData?.roll_number || currentUserId,
+    name: childProfileData?.full_name || "Enrolled Student",
+    fatherName: childProfileData?.father_name || userProfileData?.full_name || "",
+    group: (childProfileData?.discipline || "Pre-Medical") as any,
+    classLevel: (childProfileData?.class_level || "11th") as any,
+    section: childProfileData?.section || "Section A",
+    category: (childProfileData?.category || userProfileData?.category || "Civilian") as any,
+    feeStatus: "Paid",
+    dueAmount: 0,
+    attendancePercentage: 100,
+    ptmTiming: "No meeting scheduled yet",
+    timetable: [],
+    internalExamResults: [],
+  };
+
+  // Construct teacher profile for TeacherDashboard
+  const teacherProp: TeacherProfile = {
+    id: userProfileData?.roll_number || currentUserId,
+    name: userProfileData?.full_name || currentUserFullName,
+    subject: userProfileData?.subject || "",
+    classesTaught: userProfileData?.classes_taught || [],
+    timetable: [],
   };
 
   return (
@@ -201,7 +190,7 @@ export default function PortalPage() {
                   <div>
                     <h3 className="font-display font-bold text-lg text-slate-900 dark:text-white">
                       {activeRole === "parent"
-                        ? `Parent / Guardian of ${currentUserFullName}`
+                        ? `Parent / Guardian: ${currentUserFullName}`
                         : currentUserFullName}
                     </h3>
                     <div className="text-xs text-slate-500">
@@ -217,43 +206,11 @@ export default function PortalPage() {
               </div>
 
               {/* Render Respective Dashboard */}
-              {activeRole === "student" && (
-                <StudentDashboard
-                  student={{
-                    ...mockStudent,
-                    id: currentUserId,
-                    name: currentUserFullName,
-                    group: (userProfileData?.discipline || mockStudent.group) as any,
-                    classLevel: (userProfileData?.class_level || mockStudent.classLevel) as any,
-                    section: userProfileData?.section || mockStudent.section,
-                    category: (userProfileData?.category || mockStudent.category) as any,
-                  }}
-                />
-              )}
-              {activeRole === "parent" && (
-                <ParentDashboard
-                  student={{
-                    ...mockStudent,
-                    id: currentUserId,
-                    name: currentUserFullName,
-                    group: (userProfileData?.discipline || mockStudent.group) as any,
-                    classLevel: (userProfileData?.class_level || mockStudent.classLevel) as any,
-                    section: userProfileData?.section || mockStudent.section,
-                    category: (userProfileData?.category || mockStudent.category) as any,
-                  }}
-                />
-              )}
+              {activeRole === "student" && <StudentDashboard student={studentProp} />}
+              {activeRole === "parent" && <ParentDashboard student={parentStudentProp} />}
               {activeRole === "teacher" && (
                 <TeacherDashboard
-                  teacher={{
-                    ...mockTeacher,
-                    id: currentUserId,
-                    name: currentUserFullName,
-                    classesTaught:
-                      userProfileData?.classes_taught && userProfileData.classes_taught.length > 0
-                        ? userProfileData.classes_taught
-                        : mockTeacher.classesTaught,
-                  }}
+                  teacher={teacherProp}
                   isMarksEntryOpen={isMarksEntryOpen}
                 />
               )}

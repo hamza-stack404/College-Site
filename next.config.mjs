@@ -14,7 +14,12 @@ const nextConfig = {
       {
         protocol: 'https',
         hostname: 'illustrations.popertee.com',
-      }
+      },
+      {
+        protocol: 'https',
+        hostname: '**.supabase.co',
+        pathname: '/storage/v1/object/public/**',
+      },
     ],
   },
 };

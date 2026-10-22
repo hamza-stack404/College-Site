@@ -31,36 +31,63 @@ import { SectionHeader } from "@/components/shared/SectionHeader";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { MeritCalculator } from "@/components/tools/MeritCalculator";
+import { CardSkeleton } from "@/components/ui/Skeleton";
 import { intermediateGroupsData } from "@/lib/data/groups";
-import { initialNoticesData } from "@/lib/data/notices";
-import { initialAnnouncementsData } from "@/lib/data/announcements";
 import { facilitiesData } from "@/lib/data/facilities";
 import { COLLEGE_INFO } from "@/lib/data/constants";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";
 
 export default function HomePage() {
-  const [liveNotice, setLiveNotice] = useState(initialNoticesData[0]);
+  const [liveNotice, setLiveNotice] = useState<{ title: string; category?: string } | null>(null);
+  const [isLoadingNotice, setIsLoadingNotice] = useState(true);
+  const [recentAnnouncements, setRecentAnnouncements] = useState<any[]>([]);
+  const [isLoadingAnnouncements, setIsLoadingAnnouncements] = useState(true);
 
   useEffect(() => {
-    async function fetchTopNotice() {
-      if (!isSupabaseConfigured) return;
+    async function fetchHomeData() {
+      if (!isSupabaseConfigured) {
+        setIsLoadingNotice(false);
+        setIsLoadingAnnouncements(false);
+        return;
+      }
+      // Fetch top notice
       try {
         const { data, error } = await supabase
           .from("notices")
-          .select("*")
+          .select("title, category")
           .order("is_pinned", { ascending: false })
           .order("date", { ascending: false })
           .limit(1)
-          .single();
+          .maybeSingle();
 
         if (data && !error) {
-          setLiveNotice(data as any);
+          setLiveNotice(data);
         }
       } catch (err) {
-        // Fallback to initialNotice
+        console.warn("Could not fetch top notice:", err);
+      } finally {
+        setIsLoadingNotice(false);
+      }
+
+      // Fetch top 3 announcements
+      try {
+        const { data, error } = await supabase
+          .from("announcements")
+          .select("*")
+          .order("date", { ascending: false })
+          .limit(3);
+
+        if (data && !error) {
+          setRecentAnnouncements(data);
+        }
+      } catch (err) {
+        console.warn("Could not fetch announcements:", err);
+      } finally {
+        setIsLoadingAnnouncements(false);
       }
     }
-    fetchTopNotice();
+
+    fetchHomeData();
   }, []);
 
   const groupIcons = {
@@ -181,27 +208,33 @@ export default function HomePage() {
       </section>
 
       {/* 2. Realtime Notice Board Alert Strip */}
-      <section className="bg-gold-500 text-navy-950 py-3.5 px-4 sm:px-8 font-medium text-xs sm:text-sm shadow-md">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-2 font-bold min-w-0">
-            <span className="p-1.5 rounded-lg bg-navy-950 text-gold-400 flex items-center justify-center flex-shrink-0">
-              <BellRing className="w-3.5 h-3.5" />
-            </span>
-            <span className="uppercase tracking-wider text-xs flex-shrink-0">Official Circular:</span>
-            <span className="font-semibold truncate max-w-xl">
-              {liveNotice.title}
-            </span>
-          </div>
+      {(isLoadingNotice || liveNotice) && (
+        <section className="bg-gold-500 text-navy-950 py-3.5 px-4 sm:px-8 font-medium text-xs sm:text-sm shadow-md">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-2 font-bold min-w-0 w-full sm:w-auto">
+              <span className="p-1.5 rounded-lg bg-navy-950 text-gold-400 flex items-center justify-center flex-shrink-0">
+                <BellRing className="w-3.5 h-3.5" />
+              </span>
+              <span className="uppercase tracking-wider text-xs flex-shrink-0">Official Circular:</span>
+              {isLoadingNotice ? (
+                <div className="h-4 w-64 bg-navy-900/20 rounded animate-pulse" />
+              ) : (
+                <span className="font-semibold truncate max-w-xl">
+                  {liveNotice?.title}
+                </span>
+              )}
+            </div>
 
-          <Link
-            href="/notice-board"
-            className="font-bold underline underline-offset-4 flex items-center gap-1 hover:text-navy-900 flex-shrink-0"
-          >
-            <span>Visit Full Notice Board</span>
-            <ChevronRight className="w-4 h-4" />
-          </Link>
-        </div>
-      </section>
+            <Link
+              href="/notice-board"
+              className="font-bold underline underline-offset-4 flex items-center gap-1 hover:text-navy-900 flex-shrink-0"
+            >
+              <span>Visit Full Notice Board</span>
+              <ChevronRight className="w-4 h-4" />
+            </Link>
+          </div>
+        </section>
+      )}
 
       {/* 3. Principal's Welcome Message */}
       <section className="py-20 bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800">
@@ -438,35 +471,60 @@ export default function HomePage() {
             align="center"
           />
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {initialAnnouncementsData.map((item) => (
-              <div
-                key={item.id}
-                className="bg-slate-50 dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm flex flex-col justify-between"
-              >
-                <div className="relative h-48 w-full">
-                  <Image
-                    src={item.image_url}
-                    alt={item.heading}
-                    fill
-                    className="object-cover"
-                    sizes="(max-width: 768px) 100vw, 33vw"
-                  />
-                </div>
-                <div className="p-5 space-y-2 flex-1 flex flex-col justify-between">
-                  <div>
-                    <div className="text-[11px] text-gold-600 dark:text-gold-400 font-bold uppercase">{item.date}</div>
-                    <h4 className="font-display font-bold text-base text-slate-900 dark:text-white mt-1">
-                      {item.heading}
-                    </h4>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
-                      {item.description}
-                    </p>
+          {isLoadingAnnouncements ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <CardSkeleton key={i} />
+              ))}
+            </div>
+          ) : recentAnnouncements.length === 0 ? (
+            <div className="text-center py-12 max-w-md mx-auto space-y-3">
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                No recent announcements published yet.
+              </p>
+              <Link href="/announcements">
+                <Button variant="outline" size="sm">
+                  Visit Announcements Page
+                </Button>
+              </Link>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {recentAnnouncements.map((item) => (
+                <div
+                  key={item.id}
+                  className="bg-slate-50 dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm flex flex-col justify-between"
+                >
+                  <div className="relative h-48 w-full bg-slate-100 dark:bg-slate-800">
+                    {item.image_url ? (
+                      <Image
+                        src={item.image_url}
+                        alt={item.heading}
+                        fill
+                        className="object-cover"
+                        sizes="(max-width: 768px) 100vw, 33vw"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-slate-400">
+                        <Megaphone className="w-10 h-10 stroke-[1.5]" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-5 space-y-2 flex-1 flex flex-col justify-between">
+                    <div>
+                      <div className="text-[11px] text-gold-600 dark:text-gold-400 font-bold uppercase">{item.date}</div>
+                      <h4 className="font-display font-bold text-base text-slate-900 dark:text-white mt-1">
+                        {item.heading}
+                      </h4>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
+                        {item.description}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
 
           <div className="text-center pt-4">
             <Link href="/announcements">

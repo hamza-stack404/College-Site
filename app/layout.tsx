@@ -63,6 +63,11 @@ export const metadata: Metadata = {
     index: true,
     follow: true,
   },
+  icons: {
+    icon: "/img/logo.png",
+    shortcut: "/img/logo.png",
+    apple: "/img/logo.png",
+  },
 };
 
 const jsonLd = {

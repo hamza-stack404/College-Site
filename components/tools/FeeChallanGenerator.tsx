@@ -31,9 +31,8 @@ export const FeeChallanGenerator: React.FC<FeeChallanGeneratorProps> = ({
 
   // Dynamic fee calculation based on Category
   const tuitionFee = category === "Civilian" ? 5500 : 3500;
-  const labFee = group === "Pre-Medical" || group === "Pre-Engineering" || group === "Computer Science" ? 800 : 0;
   const libraryFee = 200;
-  const totalAmount = tuitionFee + labFee + libraryFee;
+  const totalAmount = tuitionFee + libraryFee;
   const dueDate = "10th of Billing Month";
   const challanNo = `BCH-${rollNo.replace(/[^0-9]/g, "") || "0101"}-202609`;
 
@@ -147,10 +146,6 @@ export const FeeChallanGenerator: React.FC<FeeChallanGeneratorProps> = ({
                   <tr>
                     <td className="py-1 px-2">Tuition Fee ({category})</td>
                     <td className="py-1 px-2 text-right font-medium">{formatCurrency(tuitionFee)}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-1 px-2">Science / IT Laboratory Fee</td>
-                    <td className="py-1 px-2 text-right font-medium">{formatCurrency(labFee)}</td>
                   </tr>
                   <tr>
                     <td className="py-1 px-2">Library & Campus Fund</td>

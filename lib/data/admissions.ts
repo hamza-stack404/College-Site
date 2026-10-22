@@ -7,7 +7,6 @@ export const feeStructureData: FeeStructureItem[] = [
     admissionFee: FEE_TIERS.admissionFee,
     monthlyTuitionCivilian: FEE_TIERS.monthlyTuition.civilian,
     monthlyTuitionForces: FEE_TIERS.monthlyTuition.forces,
-    scienceLabMonthlyFee: FEE_TIERS.scienceLabMonthlyFee,
     prospectusAndRegistrationFee: FEE_TIERS.prospectusAndRegistrationFee,
   },
   {
@@ -15,7 +14,6 @@ export const feeStructureData: FeeStructureItem[] = [
     admissionFee: FEE_TIERS.admissionFee,
     monthlyTuitionCivilian: FEE_TIERS.monthlyTuition.civilian,
     monthlyTuitionForces: FEE_TIERS.monthlyTuition.forces,
-    scienceLabMonthlyFee: FEE_TIERS.scienceLabMonthlyFee,
     prospectusAndRegistrationFee: FEE_TIERS.prospectusAndRegistrationFee,
   },
   {
@@ -23,7 +21,6 @@ export const feeStructureData: FeeStructureItem[] = [
     admissionFee: FEE_TIERS.admissionFee,
     monthlyTuitionCivilian: FEE_TIERS.monthlyTuition.civilian,
     monthlyTuitionForces: FEE_TIERS.monthlyTuition.forces,
-    scienceLabMonthlyFee: FEE_TIERS.scienceLabMonthlyFee,
     prospectusAndRegistrationFee: FEE_TIERS.prospectusAndRegistrationFee,
   },
 ];
@@ -58,43 +55,43 @@ export const admissionStepsPakistan = [
   {
     step: 3,
     title: "Merit List Display",
-    description: "Merit is determined strictly on the basis of marks obtained in the Matriculation (SSC) examination. Selected candidate lists are published on the college notice board.",
+    description: "Merit lists are prepared based on Matric marks percentage and college interview. Selected candidates must deposit fee vouchers before the due date.",
   },
   {
     step: 4,
     title: "Fee Deposit & Document Verification",
-    description: "Shortlisted candidates collect the Bank Fee Challan from the Accounts Office and deposit admission dues at designated bank branches within the prescribed date.",
+    description: "Deposit the college admission fee voucher at the designated bank branch and submit the college copy along with original documents for final verification.",
   },
   {
     step: 5,
-    title: "College ID & Freshmen Orientation",
-    description: "Submit the verified fee challan copy to Student Affairs, collect College ID card, uniform voucher, class section timetable, and attend Freshmen Orientation.",
+    title: "Orientation & Commencement of Classes",
+    description: "Attend the mandatory freshmen orientation ceremony. Class timetables, college ID cards, and academic calendars are distributed on the first day.",
   },
 ];
 
 export const faqsData: FAQItem[] = [
   {
     id: "faq-1",
-    category: "Admissions",
-    question: "What is the minimum Matric marks percentage required for F.Sc Pre-Medical and Pre-Engineering?",
-    answer: "For F.Sc Pre-Medical, a minimum of 70% marks in Matric (Science with Biology) is required. For F.Sc Pre-Engineering, a minimum of 65% marks is required. For ICS, a minimum of 60% marks is required.",
+    category: "Eligibility",
+    question: "What is the minimum percentage required for admission into F.Sc Pre-Medical?",
+    answer: "For F.Sc Pre-Medical, candidates must have passed Matriculation (Science group with Biology) or O-Levels equivalence with at least 70% aggregate marks.",
   },
   {
     id: "faq-2",
-    category: "Admissions",
-    question: "If I passed Matriculation from another provincial BISE Board, can I apply?",
-    answer: "Yes. Students from all secondary education boards of Pakistan are welcome to apply. Upon admission, an official Migration Certificate (NOC) from your parent board is required.",
+    category: "Fee & Quota",
+    question: "Is there a fee concession or quota for Armed Forces dependents?",
+    answer: "Yes, dependents of serving and retired Pakistan Navy, Army, and Airforce personnel are entitled to subsidized monthly tuition fee rates as per Bahria College regulations.",
   },
   {
     id: "faq-3",
-    category: "Fee Structure",
-    question: "How is the college fee structured and paid?",
-    answer: "Admission fee is paid only once upon enrollment (Rs. 15,000). Tuition fee is payable monthly (Rs. 5,500/month for Civilians, Rs. 3,500/month for Armed Forces dependents) through bank challans.",
+    category: "Affiliation",
+    question: "Which board is Bahria College Hanif affiliated with?",
+    answer: "The college is strictly affiliated with the Federal Board of Intermediate and Secondary Education (FBISE) Islamabad. All syllabus, examinations, and certifications follow Federal Board standards.",
   },
   {
     id: "faq-4",
-    category: "Transport",
-    question: "Is transport pick-and-drop facility available for students?",
-    answer: "Yes. Bahria College Hanif operates a dedicated, secure fleet of buses and vans covering major routes across the city with fixed morning and afternoon timings.",
+    category: "Facilities",
+    question: "Are college bus transport services available?",
+    answer: "Yes, the college operates dedicated transport routes covering major residential sectors of Karachi. Transport passes can be acquired upon admission from the Student Affairs office.",
   },
 ];

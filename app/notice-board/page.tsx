@@ -5,7 +5,7 @@ import { PageHero } from "@/components/shared/PageHero";
 import { SectionHeader } from "@/components/shared/SectionHeader";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { initialNoticesData } from "@/lib/data/notices";
+import { ListSkeleton } from "@/components/ui/Skeleton";
 import { NoticeItem } from "@/lib/types";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";
 import {
@@ -16,36 +16,45 @@ import {
   Search,
   Filter,
   AlertCircle,
-  Clock,
-  Sparkles,
+  RefreshCw,
 } from "lucide-react";
 
 export default function NoticeBoardPage() {
-  const [notices, setNotices] = useState<NoticeItem[]>(initialNoticesData);
+  const [notices, setNotices] = useState<NoticeItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const fetchNotices = async () => {
+    if (!isSupabaseConfigured) {
+      setErrorMessage("Database service is currently not configured.");
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setErrorMessage(null);
+      const { data, error } = await supabase
+        .from("notices")
+        .select("*")
+        .order("is_pinned", { ascending: false })
+        .order("date", { ascending: false });
+
+      if (error) {
+        setErrorMessage(error.message || "Failed to fetch notices.");
+      } else {
+        setNotices(data || []);
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to fetch notices from database.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    async function fetchNotices() {
-      if (!isSupabaseConfigured) return;
-      try {
-        setIsLoading(true);
-        const { data, error } = await supabase
-          .from("notices")
-          .select("*")
-          .order("is_pinned", { ascending: false })
-          .order("date", { ascending: false });
-
-        if (!error) {
-          setNotices((data as NoticeItem[]) || []);
-        }
-      } catch (err) {
-        console.error("Failed to fetch notices from Supabase:", err);
-      } finally {
-        setIsLoading(false);
-      }
-    }
     fetchNotices();
 
     if (isSupabaseConfigured) {
@@ -75,13 +84,13 @@ export default function NoticeBoardPage() {
     "General Notice",
   ];
 
-  const filteredNotices = notices.filter((item) => {
+  const filteredNotices = notices.filter((notice) => {
     const matchesCategory =
-      selectedCategory === "All" || item.category === selectedCategory;
-    const matchesQuery =
-      item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.description.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesQuery;
+      selectedCategory === "All" || notice.category === selectedCategory;
+    const matchesSearch =
+      notice.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      notice.description.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesCategory && matchesSearch;
   });
 
   return (
@@ -89,32 +98,33 @@ export default function NoticeBoardPage() {
       <PageHero
         badge="Official Circulars"
         title="College Notice Board"
-        subtitle="Stay updated with the latest academic circulars, examination date sheets, FBISE roll number slips, fee schedules, and institutional notifications."
+        subtitle="Stay updated with all formal administrative orders, exam date sheets, roll number slips, fee deadlines, and college notifications."
         breadcrumbs={[{ label: "Notice Board" }]}
-        backgroundImage="https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1600&q=80"
+        backgroundImage="https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=1600&q=80"
       />
 
-      <section className="py-16 sm:py-20 bg-slate-50 dark:bg-slate-950">
+      <section className="py-16 sm:py-20 bg-slate-50 dark:bg-slate-950 flex-1">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-          {/* Controls Bar: Search & Categories */}
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-4 sm:p-6 shadow-sm space-y-4">
-            <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
-              {/* Search Bar */}
-              <div className="relative w-full sm:w-80">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Search notices..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-medical-500"
-                />
-              </div>
+          <SectionHeader
+            badge="Institutional Circulars"
+            badgeVariant="medical"
+            title="Public Notifications &"
+            titleHighlight="Gazette Updates"
+            subtitle="Browse by category or search notice subject lines."
+            align="center"
+          />
 
-              {/* Notice Counter */}
-              <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                Showing {filteredNotices.length} notifications
-              </div>
+          {/* Search & Filter Toolbar */}
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
+            <div className="relative">
+              <Search className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search circulars by keyword, date sheet, roll number..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-11 pr-4 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-medical-500"
+              />
             </div>
 
             {/* Category Tabs */}
@@ -135,10 +145,33 @@ export default function NoticeBoardPage() {
             </div>
           </div>
 
-          {/* Notices List */}
-          <div className="space-y-4">
-            {filteredNotices.length > 0 ? (
-              filteredNotices.map((notice) => (
+          {/* Notices Content */}
+          {isLoading ? (
+            <ListSkeleton count={4} />
+          ) : errorMessage ? (
+            <div className="p-8 rounded-3xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-center space-y-4">
+              <AlertCircle className="w-8 h-8 text-rose-600 mx-auto" />
+              <div className="text-sm text-rose-800 dark:text-rose-200 font-medium">
+                {errorMessage}
+              </div>
+              <Button variant="outline" size="sm" onClick={fetchNotices} className="gap-2 mx-auto text-xs">
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Retry</span>
+              </Button>
+            </div>
+          ) : notices.length === 0 ? (
+            <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-8 text-slate-500 space-y-2">
+              <BellRing className="w-8 h-8 text-slate-300 dark:text-slate-700 mx-auto" />
+              <div className="font-semibold text-slate-700 dark:text-slate-300">Nothing published yet</div>
+              <div className="text-xs text-slate-400">Official circulars and notifications will appear here once released.</div>
+            </div>
+          ) : filteredNotices.length === 0 ? (
+            <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-8 text-slate-500">
+              No notices found matching &ldquo;{searchQuery}&rdquo;.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {filteredNotices.map((notice) => (
                 <div
                   key={notice.id}
                   className={`p-6 rounded-3xl bg-white dark:bg-slate-900 border transition-all ${
@@ -193,13 +226,9 @@ export default function NoticeBoardPage() {
                     )}
                   </div>
                 </div>
-              ))
-            ) : (
-              <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-8 text-slate-500">
-                No notices found matching your search.
-              </div>
-            )}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
     </div>

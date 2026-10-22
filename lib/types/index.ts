@@ -22,7 +22,6 @@ export interface IntermediateGroup {
     forces: number; // Armed forces dependents (Navy, Army, Air Force)
   };
   admissionFee: number;
-  scienceLabFee: number;
   description: string;
   image: string;
   eligibility: {
@@ -125,7 +124,6 @@ export interface FeeStructureItem {
   admissionFee: number;
   monthlyTuitionCivilian: number;
   monthlyTuitionForces: number;
-  scienceLabMonthlyFee: number;
   prospectusAndRegistrationFee: number;
 }
 

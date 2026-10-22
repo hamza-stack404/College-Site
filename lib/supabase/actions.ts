@@ -40,6 +40,8 @@ export interface CreatePortalAccountInput {
   category?: "Civilian" | "Armed Forces";
   contactPhone?: string;
   tempPassword?: string;
+  subject?: string;
+  classesTaught?: any[];
 }
 
 export interface AdminResetPasswordInput {
@@ -81,7 +83,7 @@ function generateTempPassword(): string {
 /**
  * Reusable admin verification helper verifying caller's session token and checking profiles.role === 'admin'
  */
-async function verifyAdminCaller(accessToken: string): Promise<{ authorized: boolean; error?: string }> {
+async function verifyAdminCaller(accessToken: string): Promise<{ authorized: boolean; error?: string; callerId?: string }> {
   if (!isSupabaseAdminConfigured || !supabaseAdmin) {
     return { authorized: false, error: "Admin client not configured. Add SUPABASE_SERVICE_ROLE_KEY." };
   }
@@ -101,7 +103,7 @@ async function verifyAdminCaller(accessToken: string): Promise<{ authorized: boo
     return { authorized: false, error: "Not authorized. Admin access required." };
   }
 
-  return { authorized: true };
+  return { authorized: true, callerId: callerData.user.id };
 }
 
 /* =========================================================================
@@ -461,10 +463,52 @@ export async function deleteGalleryItemAction(id: string, accessToken: string) {
    7. Portal Accounts & Password Management
    ========================================================================= */
 
+export async function lookupStudentAction(loginId: string, accessToken: string) {
+  const auth = await verifyAdminCaller(accessToken);
+  if (!auth.authorized) {
+    return { success: false, message: auth.error || "Unauthorized" };
+  }
+
+  try {
+    const { data: student, error } = await supabaseAdmin!
+      .from("profiles")
+      .select("id, roll_number, full_name, father_name, discipline, class_level, section, category")
+      .eq("roll_number", loginId.trim())
+      .eq("role", "student")
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!student) {
+      return { success: false, message: `No registered student found with ID "${loginId}".` };
+    }
+
+    return { success: true, student };
+  } catch (err: any) {
+    return { success: false, message: err.message || "Failed to lookup student." };
+  }
+}
+
 export async function createPortalAccountAction(input: CreatePortalAccountInput) {
   const auth = await verifyAdminCaller(input.accessToken);
   if (!auth.authorized) {
     return { success: false, message: auth.error || "Unauthorized" };
+  }
+
+  // Parent validation: verify student exists
+  if (input.role === "parent") {
+    const { data: studentRecord, error: lookupErr } = await supabaseAdmin!
+      .from("profiles")
+      .select("id, roll_number, full_name, father_name")
+      .eq("roll_number", input.loginId.trim())
+      .eq("role", "student")
+      .maybeSingle();
+
+    if (lookupErr || !studentRecord) {
+      return {
+        success: false,
+        message: `Cannot create parent account: No registered student found with ID "${input.loginId}". Please verify the student's ID first.`,
+      };
+    }
   }
 
   const tempPassword = input.tempPassword || generateTempPassword();
@@ -482,15 +526,17 @@ export async function createPortalAccountAction(input: CreatePortalAccountInput)
 
   const { error: profileErr } = await supabaseAdmin!.from("profiles").insert({
     id: newUser.user.id,
-    roll_number: input.loginId,
-    full_name: input.fullName,
-    father_name: input.fatherName,
+    roll_number: input.loginId.trim(),
+    full_name: input.fullName.trim(),
+    father_name: input.fatherName ? input.fatherName.trim() : null,
     role: input.role,
-    discipline: input.discipline,
-    class_level: input.classLevel,
-    section: input.section,
+    discipline: input.discipline || null,
+    class_level: input.classLevel || null,
+    section: input.section || null,
     category: input.category || "Civilian",
-    contact_phone: input.contactPhone,
+    contact_phone: input.contactPhone || null,
+    subject: input.subject || null,
+    classes_taught: input.classesTaught || [],
     must_change_password: true,
   });
 
@@ -545,11 +591,19 @@ export interface DeletePortalAccountInput {
 
 /**
  * Server Action: Admin deletes a user account completely (Auth user + Profile row)
+ * Prevents self-deletion.
  */
 export async function deletePortalAccountAction(input: DeletePortalAccountInput) {
   const auth = await verifyAdminCaller(input.accessToken);
   if (!auth.authorized) {
     return { success: false, message: auth.error || "Unauthorized" };
+  }
+
+  if (auth.callerId && auth.callerId === input.userId) {
+    return {
+      success: false,
+      message: "Action prohibited: You cannot delete your own administrative account.",
+    };
   }
 
   try {
@@ -611,6 +665,27 @@ export async function upsertTimetableAction(input: TimetableInput, accessToken: 
   }
 }
 
+export async function deleteTimetableAction(id: string, accessToken: string) {
+  const auth = await verifyAdminCaller(accessToken);
+  if (!auth.authorized) {
+    return { success: false, message: auth.error || "Unauthorized" };
+  }
+
+  try {
+    const { error } = await supabaseAdmin!
+      .from("timetables")
+      .delete()
+      .eq("id", id);
+
+    if (error) throw error;
+
+    revalidatePath("/portal");
+    return { success: true, message: "Timetable removed successfully." };
+  } catch (err: any) {
+    return { success: false, message: err.message || "Failed to delete timetable." };
+  }
+}
+
 export async function getTimetableAction(discipline: string, classLevel: string, section: string) {
   if (!isSupabaseConfigured) return { success: false, data: null };
 
@@ -664,9 +739,186 @@ export async function updateTeacherClassesAction(
   }
 }
 
+export async function updateTeacherAction(
+  input: {
+    teacherId: string;
+    subject?: string;
+    classesTaught?: any[];
+  },
+  accessToken: string
+) {
+  const auth = await verifyAdminCaller(accessToken);
+  if (!auth.authorized) {
+    return { success: false, message: auth.error || "Unauthorized" };
+  }
+
+  try {
+    const updatePayload: Record<string, any> = {};
+    if (input.subject !== undefined) updatePayload.subject = input.subject;
+    if (input.classesTaught !== undefined) updatePayload.classes_taught = input.classesTaught;
+
+    const { data, error } = await supabaseAdmin!
+      .from("profiles")
+      .update(updatePayload)
+      .eq("id", input.teacherId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    revalidatePath("/portal");
+    return { success: true, message: "Teacher information updated successfully.", data };
+  } catch (err: any) {
+    return { success: false, message: err.message || "Failed to update teacher." };
+  }
+}
+
 /* =========================================================================
    10. Examination Marks & Results Management (Assessment vs Send-up)
    ========================================================================= */
+
+export interface SubjectMarksEntry {
+  studentId: string;
+  obtainedMarks: number;
+  totalMarks?: number;
+}
+
+export interface SaveMarksInput {
+  examType: "Assessment" | "Send-up" | "Pre-Board";
+  subject: string;
+  entries: SubjectMarksEntry[];
+}
+
+/**
+ * Teacher marks entry server action:
+ * - Locks entry to teacher's assigned subject
+ * - Enforces marks_entry_open check from app_settings
+ * - Updates or appends subject marks in internal_exam_results without clobbering other subjects
+ */
+export async function saveMarksAction(input: SaveMarksInput, accessToken: string) {
+  if (!isSupabaseAdminConfigured || !supabaseAdmin) {
+    return { success: false, message: "Admin client not configured." };
+  }
+
+  const { data: callerData, error: callerErr } = await supabaseAdmin.auth.getUser(accessToken);
+  if (callerErr || !callerData.user) {
+    return { success: false, message: "Not authenticated." };
+  }
+
+  // Verify caller profile
+  const { data: teacherProfile, error: profileErr } = await supabaseAdmin
+    .from("profiles")
+    .select("role, subject, full_name")
+    .eq("id", callerData.user.id)
+    .single();
+
+  if (profileErr || !teacherProfile) {
+    return { success: false, message: "Teacher profile not found." };
+  }
+
+  if (teacherProfile.role !== "teacher" && teacherProfile.role !== "admin") {
+    return { success: false, message: "Only teachers or administrators can enter marks." };
+  }
+
+  // If teacher, enforce matching subject
+  if (teacherProfile.role === "teacher" && teacherProfile.subject) {
+    if (teacherProfile.subject.trim().toLowerCase() !== input.subject.trim().toLowerCase()) {
+      return {
+        success: false,
+        message: `You are authorized to enter marks for "${teacherProfile.subject}" only.`,
+      };
+    }
+  }
+
+  // Check app_settings for marks_entry_open
+  const { data: settingsData } = await supabaseAdmin
+    .from("app_settings")
+    .select("setting_value")
+    .eq("setting_key", "marks_entry_open")
+    .maybeSingle();
+
+  if (settingsData && settingsData.setting_value === false) {
+    return {
+      success: false,
+      message: "Marks entry is currently closed by the college administration.",
+    };
+  }
+
+  try {
+    const defaultTotal = input.examType === "Assessment" ? 50 : 100;
+
+    for (const entry of input.entries) {
+      if (!entry.studentId) continue;
+
+      const marksVal = Number(entry.obtainedMarks);
+      if (isNaN(marksVal) || marksVal < 0) continue;
+
+      const totalMarks = entry.totalMarks || defaultTotal;
+
+      // Fetch existing exam result for this student and exam_type
+      const { data: existingRow } = await supabaseAdmin
+        .from("internal_exam_results")
+        .select("*")
+        .eq("student_id", entry.studentId)
+        .eq("exam_type", input.examType)
+        .maybeSingle();
+
+      let subjectsList: any[] = [];
+      if (existingRow && Array.isArray(existingRow.subjects)) {
+        subjectsList = [...existingRow.subjects];
+      }
+
+      // Find or replace the subject entry
+      const existingSubIndex = subjectsList.findIndex(
+        (s) => s.name?.toLowerCase() === input.subject.toLowerCase()
+      );
+
+      const ratio = totalMarks > 0 ? marksVal / totalMarks : 0;
+      const grade =
+        ratio >= 0.8 ? "A+" : ratio >= 0.7 ? "A" : ratio >= 0.6 ? "B" : ratio >= 0.5 ? "C" : "F";
+
+      const subjectData = {
+        name: input.subject,
+        totalMarks,
+        obtainedMarks: marksVal,
+        grade,
+      };
+
+      if (existingSubIndex >= 0) {
+        subjectsList[existingSubIndex] = subjectData;
+      } else {
+        subjectsList.push(subjectData);
+      }
+
+      // Recompute totals
+      const totalObtained = subjectsList.reduce((sum, s) => sum + Number(s.obtainedMarks || 0), 0);
+      const totalMax = subjectsList.reduce((sum, s) => sum + Number(s.totalMarks || defaultTotal), 0);
+      const percentage = totalMax > 0 ? Number(((totalObtained / totalMax) * 100).toFixed(2)) : 0;
+
+      await supabaseAdmin
+        .from("internal_exam_results")
+        .upsert(
+          {
+            student_id: entry.studentId,
+            exam_type: input.examType,
+            exam_name: input.examType === "Assessment" ? "Monthly Assessment" : `${input.examType} Exam`,
+            exam_date: new Date().toISOString().split("T")[0],
+            subjects: subjectsList,
+            total_obtained: totalObtained,
+            total_max: totalMax,
+            percentage,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "student_id,exam_type" }
+        );
+    }
+
+    revalidatePath("/portal");
+    return { success: true, message: `Marks for ${input.subject} saved successfully.` };
+  } catch (err: any) {
+    return { success: false, message: err.message || "Failed to save marks." };
+  }
+}
 
 export interface SubmitMarksInput {
   studentId: string;
@@ -746,4 +998,5 @@ export async function getStudentExamResultsAction(studentId: string, examType?: 
     return { success: false, data: [] };
   }
 }
+
 

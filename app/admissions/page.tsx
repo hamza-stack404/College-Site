@@ -31,9 +31,11 @@ import {
   Send,
   Sparkles,
 } from "lucide-react";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 export default function AdmissionsPage() {
   const [isAdmissionsOpen, setIsAdmissionsOpen] = useState<boolean>(true);
+  const [isLoadingAdmissionsStatus, setIsLoadingAdmissionsStatus] = useState<boolean>(true);
   const [showFeeGenerator, setShowFeeGenerator] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -47,6 +49,8 @@ export default function AdmissionsPage() {
         }
       } catch (err) {
         console.warn("Could not check admissions status:", err);
+      } finally {
+        setIsLoadingAdmissionsStatus(false);
       }
     }
     checkAdmissionsStatus();
@@ -172,7 +176,19 @@ export default function AdmissionsPage() {
       </section>
 
       {/* 3. Online Admission Form (Connected to Supabase) */}
-      {isAdmissionsOpen ? (
+      {isLoadingAdmissionsStatus ? (
+        <section className="py-20 bg-white dark:bg-slate-900/50 border-y border-slate-200 dark:border-slate-800" id="apply-online">
+          <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+            <Skeleton className="h-8 w-48 mx-auto" />
+            <Skeleton className="h-4 w-72 mx-auto" />
+            <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-8 space-y-4">
+              <Skeleton className="h-10 w-full rounded-xl" />
+              <Skeleton className="h-10 w-full rounded-xl" />
+              <Skeleton className="h-10 w-full rounded-xl" />
+            </div>
+          </div>
+        </section>
+      ) : isAdmissionsOpen ? (
         <section className="py-20 bg-white dark:bg-slate-900/50 border-y border-slate-200 dark:border-slate-800" id="apply-online">
           <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
             <SectionHeader
@@ -435,7 +451,6 @@ export default function AdmissionsPage() {
                     <th className="py-4 px-5">Admission (One-Time)</th>
                     <th className="py-4 px-5">Civilian Monthly</th>
                     <th className="py-4 px-5">Armed Forces Monthly</th>
-                    <th className="py-4 px-5">Science/IT Lab Fee</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
@@ -455,9 +470,6 @@ export default function AdmissionsPage() {
                       </td>
                       <td className="py-4 px-5 font-bold text-medical-600 dark:text-medical-400">
                         {formatCurrency(fee.monthlyTuitionForces)} / mo
-                      </td>
-                      <td className="py-4 px-5 text-slate-600 dark:text-slate-300">
-                        {formatCurrency(fee.scienceLabMonthlyFee)} / mo
                       </td>
                     </tr>
                   ))}

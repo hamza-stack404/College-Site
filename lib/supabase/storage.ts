@@ -9,7 +9,7 @@ import { supabase, isSupabaseConfigured } from "./client";
  */
 export async function uploadFileToStorage(
   file: File,
-  bucket: "faculty-photos" | "gallery-media" | "timetables"
+  bucket: "faculty-photos" | "gallery-media" | "timetables" | "announcements"
 ): Promise<{ url: string | null; error: string | null }> {
   if (!isSupabaseConfigured) {
     // Local fallback for offline/demo environments

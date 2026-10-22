@@ -20,9 +20,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { intermediateGroupsData } from "@/lib/data/groups";
-import { initialNoticesData } from "@/lib/data/notices";
 import { positionHoldersData } from "@/lib/data/results";
-import { facultyData } from "@/lib/data/faculty";
 import { facilitiesData } from "@/lib/data/facilities";
 
 interface SearchModalProps {
@@ -63,21 +61,6 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
         icon: BookOpen,
       }));
 
-    const matchedNotices = initialNoticesData
-      .filter(
-        (n) =>
-          n.title.toLowerCase().includes(q) ||
-          n.description.toLowerCase().includes(q) ||
-          n.category.toLowerCase().includes(q)
-      )
-      .map((n) => ({
-        type: "Notice Circular",
-        title: n.title,
-        subtitle: `${n.category} • ${n.date}`,
-        href: `/notice-board`,
-        icon: FileText,
-      }));
-
     const matchedPositions = positionHoldersData
       .filter(
         (p) =>
@@ -93,19 +76,49 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
         icon: Award,
       }));
 
-    const matchedFaculty = facultyData
-      .filter(
-        (f) =>
-          f.name.toLowerCase().includes(q) ||
-          (f.subject && f.subject.toLowerCase().includes(q)) ||
-          f.qualification.toLowerCase().includes(q)
-      )
-      .map((f) => ({
-        type: "Faculty Member",
-        title: f.name,
-        subtitle: `${f.role} ${f.subject ? `— ${f.subject}` : ""}`,
-        href: `/faculty`,
+    const staticSectionLinks = [
+      {
+        keywords: ["notice", "circular", "notification", "exam", "date sheet", "datesheet", "holiday"],
+        type: "Notice Board",
+        title: "Official Notice Board",
+        subtitle: "View latest official circulars and notices",
+        href: "/notice-board",
+        icon: FileText,
+      },
+      {
+        keywords: ["announcement", "news", "event", "update", "sports"],
+        type: "Campus News",
+        title: "Latest Announcements",
+        subtitle: "College events, achievements, and updates",
+        href: "/announcements",
+        icon: Newspaper,
+      },
+      {
+        keywords: ["faculty", "teacher", "staff", "professor", "lecturer", "sir", "mam", "department"],
+        type: "Faculty Directory",
+        title: "Teaching Faculty & Staff",
+        subtitle: "Explore faculty profiles, qualifications, and departments",
+        href: "/faculty",
         icon: User,
+      },
+      {
+        keywords: ["gallery", "photos", "pictures", "campus", "labs", "library"],
+        type: "Campus Gallery",
+        title: "Campus Photo Gallery",
+        subtitle: "View campus infrastructure, labs, and activities",
+        href: "/gallery",
+        icon: Sparkles,
+      },
+    ];
+
+    const matchedStaticSections = staticSectionLinks
+      .filter((p) => p.keywords.some((k) => k.includes(q) || q.includes(k)) || p.title.toLowerCase().includes(q))
+      .map((p) => ({
+        type: p.type,
+        title: p.title,
+        subtitle: p.subtitle,
+        href: p.href,
+        icon: p.icon,
       }));
 
     const matchedFacilities = facilitiesData
@@ -124,9 +137,8 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
 
     return [
       ...matchedGroups,
-      ...matchedNotices,
+      ...matchedStaticSections,
       ...matchedPositions,
-      ...matchedFaculty,
       ...matchedFacilities,
     ];
   }, [query]);
