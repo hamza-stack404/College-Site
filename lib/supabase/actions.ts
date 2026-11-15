@@ -1,10 +1,29 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { supabase, isSupabaseConfigured } from "./client";
+import { createClient } from "@supabase/supabase-js";
+import { isSupabaseConfigured } from "./client";
 import { supabaseAdmin, isSupabaseAdminConfigured } from "./admin-client";
 import { loginIdToInternalEmail } from "./auth-helpers";
 import { PortalUserRole } from "@/lib/types";
+import {
+  SUBJECT_MARKS,
+  EXAM_SUBJECTS,
+  ExamType,
+  calculateGrade,
+} from "@/lib/data/constants";
+
+// Server-side client with persistSession: false
+const serverSupabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || "https://your-project-ref.supabase.co",
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.dummy",
+  {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  }
+);
 
 export interface NoticeInput {
   title: string;
@@ -37,10 +56,13 @@ export interface CreatePortalAccountInput {
   discipline?: "Pre-Medical" | "Pre-Engineering" | "Computer Science";
   classLevel?: string;
   section?: string;
-  category?: "Civilian" | "Armed Forces";
   contactPhone?: string;
   tempPassword?: string;
   subject?: string;
+  isClassTeacher?: boolean;
+  classTeacherGroup?: "Pre-Medical" | "Pre-Engineering" | "Computer Science";
+  classTeacherLevel?: "11th" | "12th";
+  classTeacherSection?: string;
   classesTaught?: any[];
 }
 
@@ -120,7 +142,7 @@ export async function submitAdmissionApplicationAction(input: AdmissionApplicati
   }
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await serverSupabase
       .from("admission_applications")
       .insert([input])
       .select()
@@ -156,7 +178,7 @@ export async function getAppSettingAction(key: string, defaultValue: any = null)
   }
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await serverSupabase
       .from("app_settings")
       .select("value")
       .eq("key", key)
@@ -472,7 +494,7 @@ export async function lookupStudentAction(loginId: string, accessToken: string) 
   try {
     const { data: student, error } = await supabaseAdmin!
       .from("profiles")
-      .select("id, roll_number, full_name, father_name, discipline, class_level, section, category")
+      .select("id, roll_number, full_name, father_name, discipline, class_level, section")
       .eq("roll_number", loginId.trim())
       .eq("role", "student")
       .maybeSingle();
@@ -511,6 +533,32 @@ export async function createPortalAccountAction(input: CreatePortalAccountInput)
     }
   }
 
+  // Teacher validation: check duplicate class teacher if isClassTeacher
+  if (input.role === "teacher" && input.isClassTeacher) {
+    if (!input.classTeacherGroup || !input.classTeacherLevel || !input.classTeacherSection) {
+      return {
+        success: false,
+        message: "Group, class level, and section are required when assigning a class teacher.",
+      };
+    }
+
+    const { data: existingClassTeacher } = await supabaseAdmin!
+      .from("profiles")
+      .select("full_name")
+      .eq("is_class_teacher", true)
+      .eq("class_teacher_group", input.classTeacherGroup)
+      .eq("class_teacher_level", input.classTeacherLevel)
+      .eq("class_teacher_section", input.classTeacherSection)
+      .maybeSingle();
+
+    if (existingClassTeacher) {
+      return {
+        success: false,
+        message: `A class teacher (${existingClassTeacher.full_name}) is already assigned to ${input.classTeacherLevel} ${input.classTeacherGroup} (${input.classTeacherSection}).`,
+      };
+    }
+  }
+
   const tempPassword = input.tempPassword || generateTempPassword();
   const email = loginIdToInternalEmail(input.loginId, input.role);
 
@@ -528,20 +576,29 @@ export async function createPortalAccountAction(input: CreatePortalAccountInput)
     id: newUser.user.id,
     roll_number: input.loginId.trim(),
     full_name: input.fullName.trim(),
-    father_name: input.fatherName ? input.fatherName.trim() : null,
+    father_name: input.role === "student" && input.fatherName ? input.fatherName.trim() : null,
     role: input.role,
-    discipline: input.discipline || null,
-    class_level: input.classLevel || null,
-    section: input.section || null,
-    category: input.category || "Civilian",
-    contact_phone: input.contactPhone || null,
-    subject: input.subject || null,
+    discipline: input.role === "student" ? (input.discipline || null) : null,
+    class_level: input.role === "student" ? (input.classLevel || null) : null,
+    section: input.role === "student" ? (input.section || null) : null,
+    contact_phone: input.contactPhone ? input.contactPhone.trim() : null,
+    subject: input.role === "teacher" ? (input.subject || null) : null,
+    is_class_teacher: input.role === "teacher" ? (input.isClassTeacher || false) : false,
+    class_teacher_group: input.role === "teacher" && input.isClassTeacher ? input.classTeacherGroup : null,
+    class_teacher_level: input.role === "teacher" && input.isClassTeacher ? input.classTeacherLevel : null,
+    class_teacher_section: input.role === "teacher" && input.isClassTeacher ? input.classTeacherSection : null,
     classes_taught: input.classesTaught || [],
     must_change_password: true,
   });
 
   if (profileErr) {
     await supabaseAdmin!.auth.admin.deleteUser(newUser.user.id);
+    if (profileErr.code === "23505" || profileErr.message?.toLowerCase().includes("unique")) {
+      return {
+        success: false,
+        message: "An account with this ID or class teacher section already exists.",
+      };
+    }
     return { success: false, message: profileErr.message };
   }
 
@@ -690,7 +747,7 @@ export async function getTimetableAction(discipline: string, classLevel: string,
   if (!isSupabaseConfigured) return { success: false, data: null };
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await serverSupabase
       .from("timetables")
       .select("*")
       .eq("discipline", discipline)
@@ -773,29 +830,97 @@ export async function updateTeacherAction(
   }
 }
 
+export async function updateClassTeacherAssignmentAction(
+  input: {
+    teacherId: string;
+    isClassTeacher: boolean;
+    group?: "Pre-Medical" | "Pre-Engineering" | "Computer Science";
+    classLevel?: "11th" | "12th";
+    section?: string;
+  },
+  accessToken: string
+) {
+  const auth = await verifyAdminCaller(accessToken);
+  if (!auth.authorized) {
+    return { success: false, message: auth.error || "Unauthorized" };
+  }
+
+  try {
+    if (input.isClassTeacher) {
+      if (!input.group || !input.classLevel || !input.section) {
+        return { success: false, message: "Group, class level, and section are required." };
+      }
+
+      // Check if another teacher is already assigned as class teacher for this section
+      const { data: existing } = await supabaseAdmin!
+        .from("profiles")
+        .select("id, full_name")
+        .eq("is_class_teacher", true)
+        .eq("class_teacher_group", input.group)
+        .eq("class_teacher_level", input.classLevel)
+        .eq("class_teacher_section", input.section)
+        .neq("id", input.teacherId)
+        .maybeSingle();
+
+      if (existing) {
+        return {
+          success: false,
+          message: `Class teacher (${existing.full_name}) is already assigned to ${input.classLevel} ${input.group} (${input.section}).`,
+        };
+      }
+
+      const { error } = await supabaseAdmin!
+        .from("profiles")
+        .update({
+          is_class_teacher: true,
+          class_teacher_group: input.group,
+          class_teacher_level: input.classLevel,
+          class_teacher_section: input.section,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", input.teacherId);
+
+      if (error) {
+        if (error.code === "23505" || error.message?.toLowerCase().includes("unique")) {
+          return { success: false, message: "This class section already has an assigned class teacher." };
+        }
+        return { success: false, message: error.message || "Failed to update class teacher assignment." };
+      }
+
+      revalidatePath("/portal");
+      return { success: true, message: "Class teacher assignment updated successfully." };
+    } else {
+      const { error } = await supabaseAdmin!
+        .from("profiles")
+        .update({
+          is_class_teacher: false,
+          class_teacher_group: null,
+          class_teacher_level: null,
+          class_teacher_section: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", input.teacherId);
+
+      if (error) {
+        return { success: false, message: error.message || "Failed to clear class teacher assignment." };
+      }
+
+      revalidatePath("/portal");
+      return { success: true, message: "Class teacher assignment cleared successfully." };
+    }
+  } catch (err: any) {
+    return { success: false, message: err.message || "An unexpected error occurred." };
+  }
+}
+
 /* =========================================================================
-   10. Examination Marks & Results Management (Assessment vs Send-up)
+   10. Examination Marks & Results Management (Single Write Path)
    ========================================================================= */
 
-export interface SubjectMarksEntry {
-  studentId: string;
-  obtainedMarks: number;
-  totalMarks?: number;
-}
-
-export interface SaveMarksInput {
-  examType: "Assessment" | "Send-up" | "Pre-Board";
-  subject: string;
-  entries: SubjectMarksEntry[];
-}
-
-/**
- * Teacher marks entry server action:
- * - Locks entry to teacher's assigned subject
- * - Enforces marks_entry_open check from app_settings
- * - Updates or appends subject marks in internal_exam_results without clobbering other subjects
- */
-export async function saveMarksAction(input: SaveMarksInput, accessToken: string) {
+export async function getClassTeacherRosterAction(
+  accessToken: string,
+  examType: ExamType
+) {
   if (!isSupabaseAdminConfigured || !supabaseAdmin) {
     return { success: false, message: "Admin client not configured." };
   }
@@ -805,10 +930,9 @@ export async function saveMarksAction(input: SaveMarksInput, accessToken: string
     return { success: false, message: "Not authenticated." };
   }
 
-  // Verify caller profile
   const { data: teacherProfile, error: profileErr } = await supabaseAdmin
     .from("profiles")
-    .select("role, subject, full_name")
+    .select("id, roll_number, full_name, role, is_class_teacher, class_teacher_group, class_teacher_level, class_teacher_section")
     .eq("id", callerData.user.id)
     .single();
 
@@ -817,45 +941,246 @@ export async function saveMarksAction(input: SaveMarksInput, accessToken: string
   }
 
   if (teacherProfile.role !== "teacher" && teacherProfile.role !== "admin") {
-    return { success: false, message: "Only teachers or administrators can enter marks." };
+    return { success: false, message: "Access restricted to faculty members." };
   }
 
-  // If teacher, enforce matching subject
-  if (teacherProfile.role === "teacher" && teacherProfile.subject) {
-    if (teacherProfile.subject.trim().toLowerCase() !== input.subject.trim().toLowerCase()) {
-      return {
-        success: false,
-        message: `You are authorized to enter marks for "${teacherProfile.subject}" only.`,
-      };
+  if (!teacherProfile.is_class_teacher || !teacherProfile.class_teacher_group || !teacherProfile.class_teacher_level || !teacherProfile.class_teacher_section) {
+    return { success: false, message: "You are not designated as a Class Teacher for any section." };
+  }
+
+  const group = teacherProfile.class_teacher_group;
+  const classLevel = teacherProfile.class_teacher_level;
+  const section = teacherProfile.class_teacher_section;
+
+  try {
+    const { data: students, error: studentsErr } = await supabaseAdmin
+      .from("profiles")
+      .select("id, roll_number, full_name, father_name, contact_phone, discipline, class_level, section")
+      .eq("role", "student")
+      .eq("discipline", group)
+      .eq("class_level", classLevel)
+      .eq("section", section)
+      .order("roll_number", { ascending: true });
+
+    if (studentsErr) throw studentsErr;
+
+    const studentIds = (students || []).map((s) => s.id);
+    const marksMap: Record<string, any> = {};
+
+    if (studentIds.length > 0) {
+      const { data: results, error: resultsErr } = await supabaseAdmin
+        .from("internal_exam_results")
+        .select("student_id, exam_type, subjects, total_obtained, total_max, percentage")
+        .in("student_id", studentIds)
+        .eq("exam_type", examType);
+
+      if (!resultsErr && results) {
+        for (const r of results) {
+          marksMap[r.student_id] = r;
+        }
+      }
     }
+
+    return {
+      success: true,
+      classInfo: {
+        group,
+        classLevel,
+        section,
+      },
+      students: (students || []).map((s) => ({
+        id: s.id,
+        rollNumber: s.roll_number,
+        fullName: s.full_name,
+        fatherName: s.father_name,
+        contactPhone: s.contact_phone,
+        discipline: s.discipline,
+        classLevel: s.class_level,
+        section: s.section,
+        examResult: marksMap[s.id] || null,
+      })),
+    };
+  } catch (err: any) {
+    return { success: false, message: err.message || "Failed to load class roster." };
+  }
+}
+
+export interface StudentSubjectMarksPayload {
+  theory?: number | string | null;
+  practical?: number | string | null;
+}
+
+export interface ClassMarksStudentEntry {
+  studentId: string;
+  subjects: Record<string, StudentSubjectMarksPayload>;
+}
+
+export interface SaveClassMarksInput {
+  examType: ExamType;
+  entries: ClassMarksStudentEntry[];
+}
+
+export async function saveClassMarksAction(
+  input: SaveClassMarksInput,
+  accessToken: string
+) {
+  if (!isSupabaseAdminConfigured || !supabaseAdmin) {
+    return { success: false, message: "Admin client not configured." };
   }
 
-  // Check app_settings for marks_entry_open
-  const { data: settingsData } = await supabaseAdmin
-    .from("app_settings")
-    .select("setting_value")
-    .eq("setting_key", "marks_entry_open")
-    .maybeSingle();
+  const { data: callerData, error: callerErr } = await supabaseAdmin.auth.getUser(accessToken);
+  if (callerErr || !callerData.user) {
+    return { success: false, message: "Not authenticated." };
+  }
 
-  if (settingsData && settingsData.setting_value === false) {
+  // Load teacher profile from DB
+  const { data: teacherProfile, error: profileErr } = await supabaseAdmin
+    .from("profiles")
+    .select("id, role, is_class_teacher, class_teacher_group, class_teacher_level, class_teacher_section")
+    .eq("id", callerData.user.id)
+    .single();
+
+  if (profileErr || !teacherProfile) {
+    return { success: false, message: "Profile not found." };
+  }
+
+  if (teacherProfile.role !== "teacher" && teacherProfile.role !== "admin") {
+    return { success: false, message: "Unauthorized. Teacher role required." };
+  }
+
+  if (teacherProfile.role === "teacher" && !teacherProfile.is_class_teacher) {
+    return { success: false, message: "Only the designated class teacher can enter marks for this section." };
+  }
+
+  // Check admin marks entry lock via shared helper
+  const marksSetting = await getAppSettingAction("marks_entry_open", true);
+  if (marksSetting?.value === false) {
     return {
       success: false,
-      message: "Marks entry is currently closed by the college administration.",
+      message: "Marks entry is currently locked by college administration.",
     };
   }
 
+  // Check if exam type has configured maxima
+  if (input.examType === "Assessment") {
+    return {
+      success: false,
+      message: "Maximum marks for Assessment are not configured yet. Marks entry is disabled.",
+    };
+  }
+
+  const teacherGroup = teacherProfile.class_teacher_group;
+  const teacherLevel = teacherProfile.class_teacher_level;
+  const teacherSection = teacherProfile.class_teacher_section;
+
+  if (!teacherGroup || !teacherLevel || !teacherSection) {
+    return { success: false, message: "Class teacher section is not assigned." };
+  }
+
+  // Verify all students belong to teacher's section
+  const { data: validStudents, error: studentsErr } = await supabaseAdmin
+    .from("profiles")
+    .select("id, roll_number, discipline, class_level, section")
+    .eq("role", "student")
+    .eq("discipline", teacherGroup)
+    .eq("class_level", teacherLevel)
+    .eq("section", teacherSection);
+
+  if (studentsErr || !validStudents) {
+    return { success: false, message: "Failed to verify student roster." };
+  }
+
+  const validStudentMap = new Map(validStudents.map((s) => [s.id, s]));
+
+  // Validate every entry
+  for (const entry of input.entries) {
+    const student = validStudentMap.get(entry.studentId);
+    if (!student) {
+      return {
+        success: false,
+        message: `Student ID "${entry.studentId}" does not belong to ${teacherLevel} ${teacherGroup} (${teacherSection}).`,
+      };
+    }
+
+    const groupDisciplines = student.discipline as "Pre-Medical" | "Pre-Engineering" | "Computer Science";
+    const classLevel = (student.class_level || "11th") as "11th" | "12th";
+    const allowedSubjects = EXAM_SUBJECTS[groupDisciplines]?.[classLevel] || [];
+
+    for (const [subjectName, markData] of Object.entries(entry.subjects)) {
+      if (!allowedSubjects.includes(subjectName)) {
+        return {
+          success: false,
+          message: `Subject "${subjectName}" is not valid for ${classLevel} ${groupDisciplines}.`,
+        };
+      }
+
+      const subjectConfig = SUBJECT_MARKS[subjectName];
+      if (subjectConfig === null) {
+        // Locked / unconfigured subject (e.g. THQ)
+        continue;
+      }
+
+      const rawTheory = markData.theory;
+      const rawPractical = markData.practical;
+
+      const isTheoryEmpty = rawTheory === "" || rawTheory === null || rawTheory === undefined;
+      const isPracticalEmpty = rawPractical === "" || rawPractical === null || rawPractical === undefined;
+
+      // If completely untouched/blank: skip
+      if (isTheoryEmpty && isPracticalEmpty) {
+        continue;
+      }
+
+      // If practical subject
+      if (subjectConfig.practical > 0) {
+        if (isTheoryEmpty || isPracticalEmpty) {
+          return {
+            success: false,
+            message: `Incomplete marks for ${subjectName} (${student.roll_number}): both Theory (max ${subjectConfig.theory}) and Practical (max ${subjectConfig.practical}) marks must be entered.`,
+          };
+        }
+
+        const tVal = Number(rawTheory);
+        const pVal = Number(rawPractical);
+
+        if (isNaN(tVal) || tVal < 0 || tVal > subjectConfig.theory) {
+          return {
+            success: false,
+            message: `Invalid Theory marks for ${subjectName} (${student.roll_number}): must be between 0 and ${subjectConfig.theory}.`,
+          };
+        }
+        if (isNaN(pVal) || pVal < 0 || pVal > subjectConfig.practical) {
+          return {
+            success: false,
+            message: `Invalid Practical marks for ${subjectName} (${student.roll_number}): must be between 0 and ${subjectConfig.practical}.`,
+          };
+        }
+      } else {
+        // Theory only subject
+        if (isTheoryEmpty) {
+          continue;
+        }
+
+        const tVal = Number(rawTheory);
+        if (isNaN(tVal) || tVal < 0 || tVal > subjectConfig.theory) {
+          return {
+            success: false,
+            message: `Invalid Theory marks for ${subjectName} (${student.roll_number}): must be between 0 and ${subjectConfig.theory}.`,
+          };
+        }
+      }
+    }
+  }
+
+  // Save to database
   try {
-    const defaultTotal = input.examType === "Assessment" ? 50 : 100;
-
     for (const entry of input.entries) {
-      if (!entry.studentId) continue;
+      const student = validStudentMap.get(entry.studentId)!;
+      const groupDisciplines = student.discipline as "Pre-Medical" | "Pre-Engineering" | "Computer Science";
+      const classLevel = (student.class_level || "11th") as "11th" | "12th";
+      const allowedSubjects = EXAM_SUBJECTS[groupDisciplines]?.[classLevel] || [];
 
-      const marksVal = Number(entry.obtainedMarks);
-      if (isNaN(marksVal) || marksVal < 0) continue;
-
-      const totalMarks = entry.totalMarks || defaultTotal;
-
-      // Fetch existing exam result for this student and exam_type
+      // Fetch existing row for student and exam
       const { data: existingRow } = await supabaseAdmin
         .from("internal_exam_results")
         .select("*")
@@ -863,36 +1188,80 @@ export async function saveMarksAction(input: SaveMarksInput, accessToken: string
         .eq("exam_type", input.examType)
         .maybeSingle();
 
-      let subjectsList: any[] = [];
+      let existingSubjects: any[] = [];
       if (existingRow && Array.isArray(existingRow.subjects)) {
-        subjectsList = [...existingRow.subjects];
+        existingSubjects = [...existingRow.subjects];
       }
 
-      // Find or replace the subject entry
-      const existingSubIndex = subjectsList.findIndex(
-        (s) => s.name?.toLowerCase() === input.subject.toLowerCase()
-      );
+      // Build updated subjects list
+      for (const [subjectName, markData] of Object.entries(entry.subjects)) {
+        if (!allowedSubjects.includes(subjectName)) continue;
+        const subjectConfig = SUBJECT_MARKS[subjectName];
+        if (!subjectConfig) continue; // THQ or null
 
-      const ratio = totalMarks > 0 ? marksVal / totalMarks : 0;
-      const grade =
-        ratio >= 0.8 ? "A+" : ratio >= 0.7 ? "A" : ratio >= 0.6 ? "B" : ratio >= 0.5 ? "C" : "F";
+        const rawTheory = markData.theory;
+        const rawPractical = markData.practical;
 
-      const subjectData = {
-        name: input.subject,
-        totalMarks,
-        obtainedMarks: marksVal,
-        grade,
-      };
+        const isTheoryEmpty = rawTheory === "" || rawTheory === null || rawTheory === undefined;
+        const isPracticalEmpty = rawPractical === "" || rawPractical === null || rawPractical === undefined;
 
-      if (existingSubIndex >= 0) {
-        subjectsList[existingSubIndex] = subjectData;
-      } else {
-        subjectsList.push(subjectData);
+        // Skip completely blank inputs - NEVER turn into 0
+        if (isTheoryEmpty && isPracticalEmpty) {
+          continue;
+        }
+
+        let theoryNum: number | null = null;
+        let practicalNum: number | null = null;
+        const totalMarks = subjectConfig.theory + subjectConfig.practical;
+        let obtainedMarks = 0;
+
+        if (subjectConfig.practical > 0) {
+          if (!isTheoryEmpty && !isPracticalEmpty) {
+            theoryNum = Number(rawTheory);
+            practicalNum = Number(rawPractical);
+            obtainedMarks = theoryNum + practicalNum;
+          } else {
+            continue; // incomplete, do not save
+          }
+        } else {
+          if (!isTheoryEmpty) {
+            theoryNum = Number(rawTheory);
+            practicalNum = 0;
+            obtainedMarks = theoryNum;
+          } else {
+            continue;
+          }
+        }
+
+        const grade = calculateGrade(obtainedMarks, totalMarks);
+
+        const subObj = {
+          name: subjectName,
+          theory: theoryNum,
+          practical: practicalNum,
+          obtainedMarks,
+          totalMarks,
+          grade,
+        };
+
+        const existingIdx = existingSubjects.findIndex(
+          (s) => s.name?.toLowerCase() === subjectName.toLowerCase()
+        );
+        if (existingIdx >= 0) {
+          existingSubjects[existingIdx] = subObj;
+        } else {
+          existingSubjects.push(subObj);
+        }
       }
 
-      // Recompute totals
-      const totalObtained = subjectsList.reduce((sum, s) => sum + Number(s.obtainedMarks || 0), 0);
-      const totalMax = subjectsList.reduce((sum, s) => sum + Number(s.totalMarks || defaultTotal), 0);
+      // Recompute totalObtained and totalMax ONLY from entered subjects that have configured maxima
+      const validCompletedSubjects = existingSubjects.filter((s) => {
+        const cfg = SUBJECT_MARKS[s.name];
+        return cfg !== null && typeof s.obtainedMarks === "number" && !isNaN(s.obtainedMarks);
+      });
+
+      const totalObtained = validCompletedSubjects.reduce((sum, s) => sum + Number(s.obtainedMarks || 0), 0);
+      const totalMax = validCompletedSubjects.reduce((sum, s) => sum + Number(s.totalMarks || 0), 0);
       const percentage = totalMax > 0 ? Number(((totalObtained / totalMax) * 100).toFixed(2)) : 0;
 
       await supabaseAdmin
@@ -901,9 +1270,9 @@ export async function saveMarksAction(input: SaveMarksInput, accessToken: string
           {
             student_id: entry.studentId,
             exam_type: input.examType,
-            exam_name: input.examType === "Assessment" ? "Monthly Assessment" : `${input.examType} Exam`,
+            exam_name: `${input.examType} Examination`,
             exam_date: new Date().toISOString().split("T")[0],
-            subjects: subjectsList,
+            subjects: existingSubjects,
             total_obtained: totalObtained,
             total_max: totalMax,
             percentage,
@@ -914,26 +1283,19 @@ export async function saveMarksAction(input: SaveMarksInput, accessToken: string
     }
 
     revalidatePath("/portal");
-    return { success: true, message: `Marks for ${input.subject} saved successfully.` };
+    return { success: true, message: "Marks saved and published successfully." };
   } catch (err: any) {
     return { success: false, message: err.message || "Failed to save marks." };
   }
 }
 
-export interface SubmitMarksInput {
-  studentId: string;
-  examType: "Assessment" | "Send-up" | "Pre-Board";
-  examName: string;
-  examDate: string;
-  subjects: {
-    name: string;
-    totalMarks: number;
-    obtainedMarks: number;
-    grade?: string;
-  }[];
-}
-
-export async function submitStudentMarksAction(input: SubmitMarksInput, accessToken: string) {
+export async function getTeacherSectionMarksAction(
+  group: string,
+  classLevel: string,
+  section: string,
+  examType: ExamType,
+  accessToken: string
+) {
   if (!isSupabaseAdminConfigured || !supabaseAdmin) {
     return { success: false, message: "Admin client not configured." };
   }
@@ -943,37 +1305,152 @@ export async function submitStudentMarksAction(input: SubmitMarksInput, accessTo
     return { success: false, message: "Not authenticated." };
   }
 
-  // Calculate totals
-  const totalObtained = input.subjects.reduce((sum, s) => sum + Number(s.obtainedMarks || 0), 0);
-  const totalMax = input.subjects.reduce((sum, s) => sum + Number(s.totalMarks || 100), 0);
-  const percentage = totalMax > 0 ? Number(((totalObtained / totalMax) * 100).toFixed(2)) : 0;
+  const { data: teacherProfile, error: profileErr } = await supabaseAdmin
+    .from("profiles")
+    .select("id, role, classes_taught, is_class_teacher, class_teacher_group, class_teacher_level, class_teacher_section")
+    .eq("id", callerData.user.id)
+    .single();
+
+  if (profileErr || !teacherProfile) {
+    return { success: false, message: "Profile not found." };
+  }
+
+  if (teacherProfile.role !== "teacher" && teacherProfile.role !== "admin") {
+    return { success: false, message: "Unauthorized." };
+  }
+
+  if (teacherProfile.role === "teacher") {
+    const isAssigned =
+      (Array.isArray(teacherProfile.classes_taught) &&
+        teacherProfile.classes_taught.some(
+          (c: any) => c.group === group && c.classLevel === classLevel && c.section === section
+        )) ||
+      (teacherProfile.is_class_teacher &&
+        teacherProfile.class_teacher_group === group &&
+        teacherProfile.class_teacher_level === classLevel &&
+        teacherProfile.class_teacher_section === section);
+
+    if (!isAssigned) {
+      return { success: false, message: "You are not assigned to this section." };
+    }
+  }
 
   try {
-    const { data, error } = await supabaseAdmin
-      .from("internal_exam_results")
-      .upsert(
-        {
-          student_id: input.studentId,
-          exam_type: input.examType,
-          exam_name: input.examName,
-          exam_date: input.examDate,
-          subjects: input.subjects,
-          total_obtained: totalObtained,
-          total_max: totalMax,
-          percentage,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "student_id,exam_type" }
-      )
-      .select()
-      .single();
+    const { data: students, error: studentsErr } = await supabaseAdmin
+      .from("profiles")
+      .select("id, roll_number, full_name, father_name, contact_phone, discipline, class_level, section")
+      .eq("role", "student")
+      .eq("discipline", group)
+      .eq("class_level", classLevel)
+      .eq("section", section)
+      .order("roll_number", { ascending: true });
 
-    if (error) throw error;
+    if (studentsErr) throw studentsErr;
 
-    revalidatePath("/portal");
-    return { success: true, message: "Examination marks submitted successfully.", data };
+    const studentIds = (students || []).map((s) => s.id);
+    const marksMap: Record<string, any> = {};
+
+    if (studentIds.length > 0) {
+      const { data: results } = await supabaseAdmin
+        .from("internal_exam_results")
+        .select("student_id, exam_type, subjects, total_obtained, total_max, percentage")
+        .in("student_id", studentIds)
+        .eq("exam_type", examType);
+
+      if (results) {
+        for (const r of results) {
+          marksMap[r.student_id] = r;
+        }
+      }
+    }
+
+    return {
+      success: true,
+      students: (students || []).map((s) => ({
+        id: s.id,
+        rollNumber: s.roll_number,
+        fullName: s.full_name,
+        fatherName: s.father_name,
+        contactPhone: s.contact_phone,
+        discipline: s.discipline,
+        classLevel: s.class_level,
+        section: s.section,
+        examResult: marksMap[s.id] || null,
+      })),
+    };
   } catch (err: any) {
-    return { success: false, message: err.message || "Failed to save exam marks." };
+    return { success: false, message: err.message || "Failed to load section marks." };
+  }
+}
+
+export async function getParentChildDataAction(accessToken: string) {
+  if (!isSupabaseAdminConfigured || !supabaseAdmin) {
+    return { success: false, message: "Admin client not configured." };
+  }
+
+  const { data: callerData, error: callerErr } = await supabaseAdmin.auth.getUser(accessToken);
+  if (callerErr || !callerData.user) {
+    return { success: false, message: "Not authenticated." };
+  }
+
+  const { data: parentProfile, error: profileErr } = await supabaseAdmin
+    .from("profiles")
+    .select("id, roll_number, full_name, role")
+    .eq("id", callerData.user.id)
+    .single();
+
+  if (profileErr || !parentProfile || parentProfile.role !== "parent") {
+    return { success: false, message: "Parent profile not found." };
+  }
+
+  if (!parentProfile.roll_number) {
+    return { success: false, message: "No child roll number associated with this parent account." };
+  }
+
+  try {
+    const { data: child, error: childErr } = await supabaseAdmin
+      .from("profiles")
+      .select("id, roll_number, full_name, father_name, discipline, class_level, section")
+      .eq("roll_number", parentProfile.roll_number.trim())
+      .eq("role", "student")
+      .maybeSingle();
+
+    if (childErr || !child) {
+      return { success: false, message: "Child student profile not found." };
+    }
+
+    let classTeacherName = "Not assigned yet";
+    if (child.discipline && child.class_level && child.section) {
+      const { data: teacher } = await supabaseAdmin
+        .from("profiles")
+        .select("full_name")
+        .eq("role", "teacher")
+        .eq("is_class_teacher", true)
+        .eq("class_teacher_group", child.discipline)
+        .eq("class_teacher_level", child.class_level)
+        .eq("class_teacher_section", child.section)
+        .maybeSingle();
+
+      if (teacher && teacher.full_name) {
+        classTeacherName = teacher.full_name;
+      }
+    }
+
+    return {
+      success: true,
+      child: {
+        id: child.id,
+        rollNumber: child.roll_number,
+        fullName: child.full_name,
+        fatherName: child.father_name,
+        discipline: child.discipline,
+        classLevel: child.class_level,
+        section: child.section,
+      },
+      classTeacherName,
+    };
+  } catch (err: any) {
+    return { success: false, message: err.message || "Failed to load child data." };
   }
 }
 
@@ -981,7 +1458,7 @@ export async function getStudentExamResultsAction(studentId: string, examType?: 
   if (!isSupabaseConfigured) return { success: false, data: [] };
 
   try {
-    let query = supabase
+    let query = serverSupabase
       .from("internal_exam_results")
       .select("*")
       .eq("student_id", studentId);

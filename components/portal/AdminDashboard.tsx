@@ -22,8 +22,6 @@ import {
   RefreshCw,
   GraduationCap,
   Image as ImageIcon,
-  Printer,
-  FileText,
   Upload,
   Calendar,
   Layers,
@@ -49,6 +47,7 @@ import {
   updateTeacherClassesAction,
   updateTeacherAction,
   lookupStudentAction,
+  updateClassTeacherAssignmentAction,
 } from "@/lib/supabase/actions";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";
 import { uploadFileToStorage } from "@/lib/supabase/storage";
@@ -66,8 +65,11 @@ interface ProfileRecord {
   role: string;
   discipline?: string;
   section?: string;
-  category?: string;
   subject?: string;
+  is_class_teacher?: boolean;
+  class_teacher_group?: string;
+  class_teacher_level?: string;
+  class_teacher_section?: string;
   classes_taught?: { group: string; classLevel: string; section: string }[];
   must_change_password?: boolean;
 }
@@ -86,7 +88,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onToggleMarksEntry: propToggleMarksEntry,
 }) => {
   const [activeAdminTab, setActiveAdminTab] = useState<
-    "notices" | "announcements" | "faculty" | "gallery" | "timetables" | "accounts" | "admit_cards"
+    "notices" | "announcements" | "faculty" | "gallery" | "timetables" | "accounts"
   >("notices");
 
   // Current admin session user ID (for self-deletion protection)
@@ -622,9 +624,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [accountDiscipline, setAccountDiscipline] = useState<"Pre-Medical" | "Pre-Engineering" | "Computer Science">("Pre-Medical");
   const [accountClassLevel, setAccountClassLevel] = useState("11th");
   const [accountSection, setAccountSection] = useState("Section A");
-  const [accountCategory, setAccountCategory] = useState<"Civilian" | "Armed Forces">("Civilian");
   const [accountContactPhone, setAccountContactPhone] = useState("");
-  const [accountTeacherSubject, setAccountTeacherSubject] = useState("");
+  const [accountTeacherSubject, setAccountTeacherSubject] = useState("English");
+  const [accountIsClassTeacher, setAccountIsClassTeacher] = useState(false);
+  const [accountClassTeacherGroup, setAccountClassTeacherGroup] = useState<"Pre-Medical" | "Pre-Engineering" | "Computer Science">("Pre-Medical");
+  const [accountClassTeacherLevel, setAccountClassTeacherLevel] = useState<"11th" | "12th">("11th");
+  const [accountClassTeacherSection, setAccountClassTeacherSection] = useState("Section A");
 
   // Parent lookup state
   const [isLookingUpStudent, setIsLookingUpStudent] = useState(false);
@@ -678,6 +683,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [newClassLevel, setNewClassLevel] = useState("11th");
   const [newClassSection, setNewClassSection] = useState("Section A");
   const [isSavingClasses, setIsSavingClasses] = useState(false);
+  const [modalIsClassTeacher, setModalIsClassTeacher] = useState(false);
+  const [modalClassTeacherGroup, setModalClassTeacherGroup] = useState<"Pre-Medical" | "Pre-Engineering" | "Computer Science">("Pre-Medical");
+  const [modalClassTeacherLevel, setModalClassTeacherLevel] = useState<"11th" | "12th">("11th");
+  const [modalClassTeacherSection, setModalClassTeacherSection] = useState("Section A");
+  const [isSavingClassTeacher, setIsSavingClassTeacher] = useState(false);
 
   const fetchProfiles = async () => {
     if (!isSupabaseConfigured) return;
@@ -685,7 +695,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, roll_number, full_name, role, discipline, section, category, classes_taught, must_change_password")
+        .select("id, roll_number, full_name, role, discipline, section, subject, is_class_teacher, class_teacher_group, class_teacher_level, class_teacher_section, classes_taught, must_change_password")
         .order("created_at", { ascending: false });
 
       if (data && !error) {
@@ -714,18 +724,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         return;
       }
 
+      if (accountRole === "parent" && !parentLookedUpStudent) {
+        setAccountError("Please verify the student roll number before creating a parent account.");
+        return;
+      }
+
       const res = await createPortalAccountAction({
         accessToken: token,
         loginId: accountLoginId,
         role: accountRole,
         fullName: accountFullName,
-        fatherName: accountFatherName,
+        fatherName: accountRole === "student" ? accountFatherName : undefined,
         discipline: accountRole === "student" ? accountDiscipline : undefined,
         classLevel: accountRole === "student" ? accountClassLevel : undefined,
-        section: accountRole === "student" || accountRole === "teacher" ? accountSection : undefined,
-        category: accountCategory,
+        section: accountRole === "student" ? accountSection : undefined,
         contactPhone: accountContactPhone,
-        subject: accountRole === "teacher" ? (accountTeacherSubject.trim() || undefined) : undefined,
+        subject: accountRole === "teacher" ? accountTeacherSubject : undefined,
+        isClassTeacher: accountRole === "teacher" ? accountIsClassTeacher : undefined,
+        classTeacherGroup: accountRole === "teacher" && accountIsClassTeacher ? accountClassTeacherGroup : undefined,
+        classTeacherLevel: accountRole === "teacher" && accountIsClassTeacher ? accountClassTeacherLevel : undefined,
+        classTeacherSection: accountRole === "teacher" && accountIsClassTeacher ? accountClassTeacherSection : undefined,
       });
 
       if (!res.success) {
@@ -745,7 +763,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         setAccountFullName("");
         setAccountFatherName("");
         setAccountContactPhone("");
-        setAccountTeacherSubject("");
+        setAccountTeacherSubject("English");
+        setAccountIsClassTeacher(false);
         setParentLookedUpStudent(null);
         setParentLookupError(null);
         fetchProfiles();
@@ -826,6 +845,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const openTeacherClassManager = (teacher: ProfileRecord) => {
     setEditingTeacher(teacher);
     setTeacherAssignedClasses(teacher.classes_taught || []);
+    setModalIsClassTeacher(Boolean(teacher.is_class_teacher));
+    setModalClassTeacherGroup((teacher.class_teacher_group as any) || "Pre-Medical");
+    setModalClassTeacherLevel((teacher.class_teacher_level as any) || "11th");
+    setModalClassTeacherSection(teacher.class_teacher_section || "Section A");
   };
 
   const handleAddClassAssignment = () => {
@@ -869,27 +892,53 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  const handleSaveClassTeacherAssignment = async () => {
+    if (!editingTeacher) return;
+    setIsSavingClassTeacher(true);
+    try {
+      const token = await getAccessToken();
+      if (!token) return;
+
+      const res = await updateClassTeacherAssignmentAction(
+        {
+          teacherId: editingTeacher.id,
+          isClassTeacher: modalIsClassTeacher,
+          group: modalIsClassTeacher ? modalClassTeacherGroup : undefined,
+          classLevel: modalIsClassTeacher ? modalClassTeacherLevel : undefined,
+          section: modalIsClassTeacher ? modalClassTeacherSection : undefined,
+        },
+        token
+      );
+
+      if (res.success) {
+        setProfilesList(
+          profilesList.map((p) =>
+            p.id === editingTeacher.id
+              ? {
+                  ...p,
+                  is_class_teacher: modalIsClassTeacher,
+                  class_teacher_group: modalIsClassTeacher ? modalClassTeacherGroup : undefined,
+                  class_teacher_level: modalIsClassTeacher ? modalClassTeacherLevel : undefined,
+                  class_teacher_section: modalIsClassTeacher ? modalClassTeacherSection : undefined,
+                }
+              : p
+          )
+        );
+        showNotification(`Class teacher assignment updated for ${editingTeacher.full_name}.`);
+      } else {
+        showNotification(res.message || "Failed to update class teacher assignment.", "error");
+      }
+    } finally {
+      setIsSavingClassTeacher(false);
+    }
+  };
+
   const handleCopyPassword = () => {
     if (tempPasswordResult) {
       navigator.clipboard.writeText(tempPasswordResult.tempPassword);
       setHasCopiedPassword(true);
       setTimeout(() => setHasCopiedPassword(false), 2500);
     }
-  };
-
-  /* =========================================================================
-     7. Admit Card Generator (Admin-Only Tool)
-     ========================================================================= */
-  const [admitStudentName, setAdmitStudentName] = useState("Muhammad Hamza Khan");
-  const [admitFatherName, setAdmitFatherName] = useState("Tariq Mahmood Khan");
-  const [admitRollNo, setAdmitRollNo] = useState("BCH-2026-0101");
-  const [admitGroup, setAdmitGroup] = useState<"Pre-Medical" | "Pre-Engineering" | "Computer Science">("Pre-Medical");
-  const [admitExamCenter, setAdmitExamCenter] = useState("Hanif Examination Hall, Main Campus, Karachi");
-  const [admitExamDate, setAdmitExamDate] = useState("October 15, 2026");
-  const [admitCardPreview, setAdmitCardPreview] = useState(false);
-
-  const handlePrintAdmitCard = () => {
-    window.print();
   };
 
   return (
@@ -979,7 +1028,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           { id: "gallery", label: "Media Gallery" },
           { id: "timetables", label: "Manage Timetables" },
           { id: "accounts", label: "User Accounts & Passwords" },
-          { id: "admit_cards", label: "Admit Card Generator" },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -1731,7 +1779,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         className="gap-1.5 shrink-0 px-3 text-xs"
                       >
                         {isLookingUpStudent ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
-                        <span>Verify</span>
+                        <span>Verify Child</span>
                       </Button>
                     )}
                   </div>
@@ -1768,73 +1816,69 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Father&apos;s Name
-                  </label>
-                  <input
-                    placeholder="e.g. Ahmed Raza"
-                    value={accountFatherName}
-                    onChange={(e) => setAccountFatherName(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
-                  />
-                </div>
+                {/* Read-only Child's Name for Parent */}
+                {accountRole === "parent" && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Child&apos;s Name (Verified)
+                    </label>
+                    <input
+                      readOnly
+                      disabled
+                      value={parentLookedUpStudent ? parentLookedUpStudent.full_name : "Verify child's roll number above"}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-700 dark:text-slate-300 cursor-not-allowed font-semibold"
+                    />
+                  </div>
+                )}
+
+                {/* Father's Name only for Student */}
+                {accountRole === "student" && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Father&apos;s Name *
+                    </label>
+                    <input
+                      required
+                      placeholder="e.g. Ahmed Raza"
+                      value={accountFatherName}
+                      onChange={(e) => setAccountFatherName(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
+                    />
+                  </div>
+                )}
               </div>
 
-              {/* Teacher Subject Field */}
-              {accountRole === "teacher" && (
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Teaching Subject (Locks exam marks entry) *
-                  </label>
-                  <input
-                    required
-                    placeholder="e.g. Physics, Chemistry, Mathematics, Urdu, English, Biology, Computer Science"
-                    value={accountTeacherSubject}
-                    onChange={(e) => setAccountTeacherSubject(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
-                  />
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    This teacher will only be permitted to enter and edit exam marks for this specific subject.
-                  </p>
-                </div>
-              )}
-
-              {/* D1: Section Dropdown (A–E) for Students and Teachers */}
-              {(accountRole === "student" || accountRole === "teacher") && (
+              {/* Student Discipline, Class Level, Section */}
+              {accountRole === "student" && (
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  {accountRole === "student" && (
-                    <>
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                          Academic Discipline
-                        </label>
-                        <select
-                          value={accountDiscipline}
-                          onChange={(e) => setAccountDiscipline(e.target.value as any)}
-                          className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
-                        >
-                          <option value="Pre-Medical">Pre-Medical</option>
-                          <option value="Pre-Engineering">Pre-Engineering</option>
-                          <option value="Computer Science">Computer Science (ICS)</option>
-                        </select>
-                      </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Academic Discipline
+                    </label>
+                    <select
+                      value={accountDiscipline}
+                      onChange={(e) => setAccountDiscipline(e.target.value as any)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
+                    >
+                      <option value="Pre-Medical">Pre-Medical</option>
+                      <option value="Pre-Engineering">Pre-Engineering</option>
+                      <option value="Computer Science">Computer Science (ICS)</option>
+                    </select>
+                  </div>
 
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                          Class Level
-                        </label>
-                        <select
-                          value={accountClassLevel}
-                          onChange={(e) => setAccountClassLevel(e.target.value)}
-                          className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
-                        >
-                          <option value="11th">Class 11 (HSSC Part-I)</option>
-                          <option value="12th">Class 12 (HSSC Part-II)</option>
-                        </select>
-                      </div>
-                    </>
-                  )}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Class Level
+                    </label>
+                    <select
+                      value={accountClassLevel}
+                      onChange={(e) => setAccountClassLevel(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
+                    >
+                      <option value="11th">Class 11 (HSSC Part-I)</option>
+                      <option value="12th">Class 12 (HSSC Part-II)</option>
+                    </select>
+                  </div>
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
@@ -1855,39 +1899,120 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Fee Quota Category
-                  </label>
-                  <select
-                    value={accountCategory}
-                    onChange={(e) => setAccountCategory(e.target.value as any)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
-                  >
-                    <option value="Civilian">Civilian Rate</option>
-                    <option value="Armed Forces">Armed Forces Dependent</option>
-                  </select>
-                </div>
+              {/* Teacher Form: Subject Dropdown + Class Teacher Assignment */}
+              {accountRole === "teacher" && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Subject
+                    </label>
+                    <select
+                      value={accountTeacherSubject}
+                      onChange={(e) => setAccountTeacherSubject(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white font-medium"
+                    >
+                      {[
+                        "English",
+                        "Urdu",
+                        "Mathematics",
+                        "Chemistry",
+                        "Physics",
+                        "Biology",
+                        "Computer Science",
+                        "Tarjuma-tul-Quran (THQ)",
+                        "Islamiat",
+                        "Pakistan Studies",
+                      ].map((sub) => (
+                        <option key={sub} value={sub}>
+                          {sub}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Contact Phone (WhatsApp)
-                  </label>
-                  <input
-                    placeholder="0300-1234567"
-                    value={accountContactPhone}
-                    onChange={(e) => setAccountContactPhone(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
-                  />
+                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={accountIsClassTeacher}
+                        onChange={(e) => setAccountIsClassTeacher(e.target.checked)}
+                        className="w-4 h-4 rounded text-medical-600 focus:ring-medical-500 border-slate-300"
+                      />
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                        Is Class Teacher
+                      </span>
+                    </label>
+
+                    {accountIsClassTeacher && (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                            Group *
+                          </label>
+                          <select
+                            value={accountClassTeacherGroup}
+                            onChange={(e) => setAccountClassTeacherGroup(e.target.value as any)}
+                            className="w-full px-2.5 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+                          >
+                            <option value="Pre-Medical">Pre-Medical</option>
+                            <option value="Pre-Engineering">Pre-Engineering</option>
+                            <option value="Computer Science">Computer Science</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                            Class *
+                          </label>
+                          <select
+                            value={accountClassTeacherLevel}
+                            onChange={(e) => setAccountClassTeacherLevel(e.target.value as any)}
+                            className="w-full px-2.5 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+                          >
+                            <option value="11th">11th</option>
+                            <option value="12th">12th</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                            Section (A–E) *
+                          </label>
+                          <select
+                            value={accountClassTeacherSection}
+                            onChange={(e) => setAccountClassTeacherSection(e.target.value)}
+                            className="w-full px-2.5 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white font-semibold"
+                          >
+                            <option value="Section A">Section A</option>
+                            <option value="Section B">Section B</option>
+                            <option value="Section C">Section C</option>
+                            <option value="Section D">Section D</option>
+                            <option value="Section E">Section E</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Contact Phone (WhatsApp)
+                </label>
+                <input
+                  placeholder="0300-1234567"
+                  value={accountContactPhone}
+                  onChange={(e) => setAccountContactPhone(e.target.value)}
+                  className="w-full max-w-sm px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
+                />
               </div>
 
               <Button
                 type="submit"
                 variant="primary"
                 size="md"
-                disabled={isCreatingAccount}
+                disabled={isCreatingAccount || (accountRole === "parent" && !parentLookedUpStudent)}
                 className="gap-2"
               >
                 {isCreatingAccount && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -1947,9 +2072,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </td>
                         <td className="py-3 px-4 text-slate-500">
                           {p.role === "teacher" ? (
-                            <span className="text-xs font-semibold text-medical-600 dark:text-medical-400">
-                              {(p.classes_taught?.length || 0)} section(s) assigned
-                            </span>
+                            <div className="space-y-1">
+                              <div className="text-xs font-semibold text-medical-600 dark:text-medical-400">
+                                {p.subject ? `${p.subject} • ` : ""}{(p.classes_taught?.length || 0)} section(s) assigned
+                              </div>
+                              {p.is_class_teacher && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                                  Class Teacher: {p.class_teacher_group} ({p.class_teacher_level} {p.class_teacher_section})
+                                </span>
+                              )}
+                            </div>
                           ) : (
                             <span>{p.discipline || "—"} {p.section ? `(${p.section})` : ""}</span>
                           )}
@@ -2031,6 +2163,85 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   >
                     <X className="w-5 h-5" />
                   </button>
+                </div>
+
+                {/* Class Teacher Assignment Editor */}
+                <div className="p-4 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 space-y-3">
+                  <div className="text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center justify-between">
+                    <span>Class Teacher Designation</span>
+                    {modalIsClassTeacher && (
+                      <Badge variant="gold" size="sm">Assigned</Badge>
+                    )}
+                  </div>
+
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={modalIsClassTeacher}
+                      onChange={(e) => setModalIsClassTeacher(e.target.checked)}
+                      className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 border-slate-300"
+                    />
+                    <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                      Designate as Section Class Teacher
+                    </span>
+                  </label>
+
+                  {modalIsClassTeacher && (
+                    <div className="grid grid-cols-3 gap-2 text-xs pt-1">
+                      <div>
+                        <label className="block text-[11px] text-slate-500 mb-1">Group</label>
+                        <select
+                          value={modalClassTeacherGroup}
+                          onChange={(e) => setModalClassTeacherGroup(e.target.value as any)}
+                          className="w-full px-2 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs"
+                        >
+                          <option value="Pre-Medical">Pre-Medical</option>
+                          <option value="Pre-Engineering">Pre-Engineering</option>
+                          <option value="Computer Science">Computer Science</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] text-slate-500 mb-1">Class Level</label>
+                        <select
+                          value={modalClassTeacherLevel}
+                          onChange={(e) => setModalClassTeacherLevel(e.target.value as any)}
+                          className="w-full px-2 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs"
+                        >
+                          <option value="11th">11th</option>
+                          <option value="12th">12th</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] text-slate-500 mb-1">Section</label>
+                        <select
+                          value={modalClassTeacherSection}
+                          onChange={(e) => setModalClassTeacherSection(e.target.value)}
+                          className="w-full px-2 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs"
+                        >
+                          <option value="Section A">Section A</option>
+                          <option value="Section B">Section B</option>
+                          <option value="Section C">Section C</option>
+                          <option value="Section D">Section D</option>
+                          <option value="Section E">Section E</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end pt-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isSavingClassTeacher}
+                      onClick={handleSaveClassTeacherAssignment}
+                      className="text-xs gap-1"
+                    >
+                      {isSavingClassTeacher ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                      <span>Save Class Teacher Status</span>
+                    </Button>
+                  </div>
                 </div>
 
                 {/* Add new allocation */}
@@ -2118,215 +2329,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     {isSavingClasses ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
                     <span>{isSavingClasses ? "Saving Changes..." : "Save Assigned Sections"}</span>
                   </Button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* TAB 7: Admit Card Generator (Admin-Only Tool) */}
-      {activeAdminTab === "admit_cards" && (
-        <div className="space-y-8">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-sm space-y-6 no-print">
-            <div>
-              <h4 className="font-display font-bold text-xl text-slate-900 dark:text-white">
-                Generate Official Candidate Admit Card
-              </h4>
-              <p className="text-xs text-slate-500 mt-1">
-                Enter candidate particulars to generate a printable examination hall entry slip.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Candidate Student Name *
-                </label>
-                <input
-                  type="text"
-                  value={admitStudentName}
-                  onChange={(e) => setAdmitStudentName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Father&apos;s Name *
-                </label>
-                <input
-                  type="text"
-                  value={admitFatherName}
-                  onChange={(e) => setAdmitFatherName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Roll / Exam Seat Number *
-                </label>
-                <input
-                  type="text"
-                  value={admitRollNo}
-                  onChange={(e) => setAdmitRollNo(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Academic Stream / Group *
-                </label>
-                <select
-                  value={admitGroup}
-                  onChange={(e) => setAdmitGroup(e.target.value as any)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm text-slate-900 dark:text-white"
-                >
-                  <option value="Pre-Medical">F.Sc Pre-Medical</option>
-                  <option value="Pre-Engineering">F.Sc Pre-Engineering</option>
-                  <option value="Computer Science">ICS Computer Science</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Designated Examination Center *
-                </label>
-                <input
-                  type="text"
-                  value={admitExamCenter}
-                  onChange={(e) => setAdmitExamCenter(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Commencement Date *
-                </label>
-                <input
-                  type="text"
-                  value={admitExamDate}
-                  onChange={(e) => setAdmitExamDate(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white"
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <Button
-                variant="primary"
-                size="md"
-                onClick={() => setAdmitCardPreview(true)}
-                className="gap-2"
-              >
-                <FileText className="w-4 h-4" />
-                <span>Generate / Update Card Preview</span>
-              </Button>
-            </div>
-          </div>
-
-          {/* Printable Admit Card Layout */}
-          {(admitCardPreview || true) && (
-            <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-10 shadow-xl space-y-6">
-              <div className="flex justify-between items-center no-print border-b border-slate-200 dark:border-slate-800 pb-4">
-                <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                  Admit Card Ready for Print
-                </div>
-                <Button variant="gold" size="sm" onClick={handlePrintAdmitCard} className="gap-2 text-xs">
-                  <Printer className="w-4 h-4" />
-                  <span>Print Admit Card</span>
-                </Button>
-              </div>
-
-              {/* Physical Print Slip Card */}
-              <div className="border-2 border-navy-900 p-6 sm:p-8 rounded-2xl bg-white text-slate-900 space-y-6 font-sans">
-                {/* Header Strip */}
-                <div className="flex flex-col sm:flex-row items-center justify-between border-b-2 border-navy-900 pb-4 gap-4 text-center sm:text-left">
-                  <div className="flex items-center gap-3">
-                    <CrestLogo showText={false} className="w-16 h-16" />
-                    <div>
-                      <h2 className="font-display font-black text-xl text-navy-950 uppercase tracking-tight">
-                        Bahria College Hanif Campus
-                      </h2>
-                      <div className="text-xs font-bold text-medical-700 uppercase tracking-wider">
-                        Affiliated with Federal Board (FBISE) Islamabad
-                      </div>
-                      <div className="text-[11px] text-slate-500">
-                        Official Academic Term Examination Authority
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="border-2 border-navy-900 px-4 py-2 rounded-xl text-center">
-                    <div className="text-[10px] font-bold text-slate-500 uppercase">Examination Roll No</div>
-                    <div className="font-mono font-black text-xl text-navy-950">{admitRollNo}</div>
-                  </div>
-                </div>
-
-                {/* Subtitle Banner */}
-                <div className="bg-navy-950 text-white text-center py-1.5 px-4 rounded-lg font-bold text-xs uppercase tracking-widest">
-                  PROVISIONAL ADMIT CARD & CANDIDATE ENTRY PASS — CLASS 11 (HSSC-I)
-                </div>
-
-                {/* Candidate Particulars Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-8 text-xs border border-slate-300 p-4 rounded-xl bg-slate-50/50">
-                  <div className="flex justify-between border-b border-slate-200 pb-1.5">
-                    <span className="font-bold text-slate-600">Candidate Name:</span>
-                    <span className="font-bold text-navy-950 uppercase">{admitStudentName}</span>
-                  </div>
-
-                  <div className="flex justify-between border-b border-slate-200 pb-1.5">
-                    <span className="font-bold text-slate-600">Father&apos;s Name:</span>
-                    <span className="font-semibold text-slate-900">{admitFatherName}</span>
-                  </div>
-
-                  <div className="flex justify-between border-b border-slate-200 pb-1.5">
-                    <span className="font-bold text-slate-600">Discipline / Group:</span>
-                    <span className="font-bold text-medical-700">{admitGroup}</span>
-                  </div>
-
-                  <div className="flex justify-between border-b border-slate-200 pb-1.5">
-                    <span className="font-bold text-slate-600">Commencement Date:</span>
-                    <span className="font-semibold text-slate-900">{admitExamDate}</span>
-                  </div>
-
-                  <div className="sm:col-span-2 flex justify-between pt-1">
-                    <span className="font-bold text-slate-600">Examination Venue:</span>
-                    <span className="font-semibold text-slate-900 text-right">{admitExamCenter}</span>
-                  </div>
-                </div>
-
-                {/* Examination Instructions */}
-                <div className="border border-slate-200 rounded-xl p-4 text-[11px] text-slate-600 space-y-1.5 bg-slate-50/30">
-                  <div className="font-bold text-slate-900 uppercase tracking-wider text-xs mb-1">
-                    Mandatory Candidate Instructions:
-                  </div>
-                  <p>1. Candidates must arrive at the examination center 30 minutes prior to scheduled start time.</p>
-                  <p>2. Possession of mobile phones, smartwatches, or unauthorized study notes inside the hall is strictly prohibited.</p>
-                  <p>3. This card along with the physical college student ID pass must be displayed on the candidate desk at all times.</p>
-                  <p>4. Non-compliance with invigilator directions will result in immediate disqualification under FBISE exam bylaws.</p>
-                </div>
-
-                {/* Signatures & Seal */}
-                <div className="grid grid-cols-3 gap-4 pt-6 text-center text-xs">
-                  <div className="space-y-10">
-                    <div className="h-10 border-b border-dashed border-slate-400" />
-                    <span className="font-bold text-slate-700 text-[11px]">Candidate Signature</span>
-                  </div>
-
-                  <div className="flex items-center justify-center">
-                    <div className="w-20 h-20 rounded-full border-2 border-dashed border-gold-600 text-gold-700 flex items-center justify-center text-[10px] font-bold uppercase text-center p-1">
-                      Official Institutional Seal
-                    </div>
-                  </div>
-
-                  <div className="space-y-10">
-                    <div className="h-10 border-b border-dashed border-slate-400" />
-                    <span className="font-bold text-slate-700 text-[11px]">Controller of Examinations</span>
-                  </div>
                 </div>
               </div>
             </div>

@@ -13,25 +13,74 @@ import {
   ChevronUp,
   Award,
   UserCheck,
+  GraduationCap,
+  Loader2,
 } from "lucide-react";
-import { getStudentExamResultsAction } from "@/lib/supabase/actions";
-import { FEE_TIERS } from "@/lib/data/constants";
+import { getStudentExamResultsAction, getParentChildDataAction } from "@/lib/supabase/actions";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";
+import { ExamType, SUBJECT_MARKS, calculateGrade } from "@/lib/data/constants";
 
 interface ParentDashboardProps {
   student: StudentProfile;
 }
 
-export const ParentDashboard: React.FC<ParentDashboardProps> = ({ student }) => {
-  const [activeExamPhase, setActiveExamPhase] = useState<"Assessment" | "Send-up">("Assessment");
-  const [showBreakdown, setShowBreakdown] = useState(false);
+export const ParentDashboard: React.FC<ParentDashboardProps> = ({ student: initialStudent }) => {
+  const [activeExamPhase, setActiveExamPhase] = useState<ExamType>("Send-up");
+  const [showBreakdown, setShowBreakdown] = useState(true);
   const [examResultsData, setExamResultsData] = useState<any[]>([]);
   const [isLoadingMarks, setIsLoadingMarks] = useState(true);
 
+  // Real child record & class teacher from getParentChildDataAction
+  const [childData, setChildData] = useState<{
+    id: string;
+    rollNumber: string;
+    fullName: string;
+    fatherName?: string;
+    discipline?: string;
+    classLevel?: string;
+    section?: string;
+  } | null>(null);
+  const [classTeacherName, setClassTeacherName] = useState<string>("Loading…");
+
+  // Load real child info and class teacher
   useEffect(() => {
-    async function loadMarks() {
+    async function loadChildAndTeacher() {
+      if (!isSupabaseConfigured) {
+        setClassTeacherName("Not assigned yet");
+        return;
+      }
+
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData.session?.access_token;
+        if (!token) {
+          setClassTeacherName("Not assigned yet");
+          return;
+        }
+
+        const res = await getParentChildDataAction(token);
+        if (res.success && res.child) {
+          setChildData(res.child);
+          setClassTeacherName(res.classTeacherName || "Not assigned yet");
+
+          // Load marks for this verified child id
+          loadMarks(res.child.id);
+        } else {
+          setClassTeacherName("Not assigned yet");
+          if (initialStudent?.id) {
+            loadMarks(initialStudent.id);
+          }
+        }
+      } catch (err) {
+        console.warn("Could not load parent child data:", err);
+        setClassTeacherName("Not assigned yet");
+      }
+    }
+
+    async function loadMarks(studentId: string) {
       setIsLoadingMarks(true);
       try {
-        const marksRes = await getStudentExamResultsAction(student.id);
+        const marksRes = await getStudentExamResultsAction(studentId);
         if (marksRes.success && marksRes.data && marksRes.data.length > 0) {
           setExamResultsData(
             marksRes.data.map((r: any) => ({
@@ -53,15 +102,23 @@ export const ParentDashboard: React.FC<ParentDashboardProps> = ({ student }) => 
         setIsLoadingMarks(false);
       }
     }
-    loadMarks();
-  }, [student.id]);
+
+    loadChildAndTeacher();
+  }, [initialStudent?.id]);
 
   const currentExam = examResultsData.find((r) => r.examType === activeExamPhase);
 
-  const monthlyTuition =
-    student.category === "Armed Forces"
-      ? FEE_TIERS.monthlyTuition.forces
-      : FEE_TIERS.monthlyTuition.civilian;
+  // Student display particulars
+  const studentName = childData?.fullName || initialStudent.name || "Student";
+  const studentRoll = childData?.rollNumber || initialStudent.id || "—";
+  const studentDiscipline = childData?.discipline || initialStudent.group || "—";
+  const studentClassLevel = childData?.classLevel || initialStudent.classLevel || "—";
+  const studentSection = childData?.section || initialStudent.section || "—";
+
+  const isScienceSubject = (name: string) => {
+    const cfg = SUBJECT_MARKS[name];
+    return Boolean(cfg && cfg.practical > 0);
+  };
 
   return (
     <div className="space-y-8">
@@ -69,37 +126,51 @@ export const ParentDashboard: React.FC<ParentDashboardProps> = ({ student }) => 
         <div>
           <Badge variant="gold" size="sm">Parent Academic Portal</Badge>
           <h4 className="font-display font-bold text-2xl text-slate-900 dark:text-white mt-2">
-            Progress Overview for {student.name}
+            Progress Overview for {studentName}
           </h4>
           <p className="text-xs text-slate-500 mt-1">
-            Child Roll Number: <strong className="text-navy-950 dark:text-white font-mono">{student.id}</strong> • Class: {student.classLevel || "11th"} {student.group} ({student.section})
+            Child Roll Number: <strong className="text-navy-950 dark:text-white font-mono">{studentRoll}</strong> • {studentClassLevel !== "—" ? `Class ${studentClassLevel}` : "—"} {studentDiscipline} {studentSection !== "—" ? `(${studentSection})` : ""}
           </p>
         </div>
 
         {/* 3 Metric Badges */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* Box 1: PTM */}
           <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-1">
-            <div className="text-[11px] text-slate-400 uppercase font-bold tracking-wider">Parent-Teacher Meeting (PTM)</div>
+            <div className="text-[11px] text-slate-400 uppercase font-bold tracking-wider">
+              Parent-Teacher Meeting (PTM)
+            </div>
             <div className="text-sm font-semibold text-slate-700 dark:text-slate-300">
               No meeting scheduled yet
             </div>
             <div className="text-[11px] text-slate-400">Notices will be communicated via portal</div>
           </div>
 
+          {/* Box 2: Class Teacher (Replaced Fee Quota Box) */}
           <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-1">
-            <div className="text-[11px] text-slate-400 uppercase font-bold tracking-wider">Fee Category & Tuition</div>
-            <div className="text-sm font-bold text-slate-900 dark:text-white">
-              PKR {monthlyTuition.toLocaleString()} <span className="text-xs font-normal text-slate-500">/ month</span>
+            <div className="text-[11px] text-slate-400 uppercase font-bold tracking-wider">
+              Section Class Teacher
             </div>
-            <div className="text-[11px] text-slate-500">Rate: {student.category}</div>
+            <div className="text-sm font-bold text-navy-950 dark:text-white flex items-center gap-1.5">
+              <GraduationCap className="w-4 h-4 text-gold-500 shrink-0" />
+              <span>{classTeacherName}</span>
+            </div>
+            <div className="text-[11px] text-slate-500">
+              {studentSection !== "—" ? `${studentSection} In-Charge` : "Academic Mentor"}
+            </div>
           </div>
 
+          {/* Box 3: Academic Enrollment (Real DB values, no hardcoded Class 11) */}
           <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-1">
-            <div className="text-[11px] text-slate-400 uppercase font-bold tracking-wider">Academic Enrollment</div>
+            <div className="text-[11px] text-slate-400 uppercase font-bold tracking-wider">
+              Academic Enrollment
+            </div>
             <div className="text-sm font-bold text-emerald-600 flex items-center gap-1">
               <UserCheck className="w-4 h-4" /> Active Student
             </div>
-            <div className="text-[11px] text-slate-400">Class 11 (HSSC Part-I)</div>
+            <div className="text-[11px] text-slate-500 font-medium">
+              {studentClassLevel !== "—" ? `Class ${studentClassLevel}` : "—"} {studentDiscipline !== "—" ? `• ${studentDiscipline}` : ""} {studentSection !== "—" ? `(${studentSection})` : ""}
+            </div>
           </div>
         </div>
 
@@ -112,32 +183,26 @@ export const ParentDashboard: React.FC<ParentDashboardProps> = ({ student }) => 
 
             {/* Stage Selector */}
             <div className="flex gap-2">
-              <button
-                onClick={() => setActiveExamPhase("Assessment")}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                  activeExamPhase === "Assessment"
-                    ? "bg-medical-600 text-white shadow-sm"
-                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-                }`}
-              >
-                Monthly Assessment
-              </button>
-              <button
-                onClick={() => setActiveExamPhase("Send-up")}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                  activeExamPhase === "Send-up"
-                    ? "bg-navy-950 text-white dark:bg-medical-500 dark:text-navy-950 shadow-sm"
-                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-                }`}
-              >
-                Send-up Examination
-              </button>
+              {(["Assessment", "Send-up", "Pre-Board"] as ExamType[]).map((phase) => (
+                <button
+                  key={phase}
+                  onClick={() => setActiveExamPhase(phase)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                    activeExamPhase === phase
+                      ? "bg-navy-950 text-white dark:bg-medical-500 dark:text-navy-950 shadow-sm"
+                      : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  {phase === "Assessment" ? "Monthly Assessment" : `${phase} Examination`}
+                </button>
+              ))}
             </div>
           </div>
 
           {isLoadingMarks ? (
-            <div className="py-8 text-center text-xs text-slate-500">
-              Loading examination records...
+            <div className="py-8 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-medical-600" />
+              <span>Loading examination records...</span>
             </div>
           ) : currentExam ? (
             <>
@@ -151,7 +216,7 @@ export const ParentDashboard: React.FC<ParentDashboardProps> = ({ student }) => 
                     {currentExam.totalObtained} / {currentExam.totalMax} Total Marks
                   </div>
                   <p className="text-xs text-slate-600 dark:text-slate-300">
-                    Your ward secured an overall aggregate of <strong>{currentExam.percentage}%</strong>.
+                    Your ward secured an overall aggregate of <strong>{currentExam.percentage}%</strong> (Grade: {calculateGrade(currentExam.totalObtained, currentExam.totalMax)}).
                   </p>
                 </div>
 
@@ -166,32 +231,64 @@ export const ParentDashboard: React.FC<ParentDashboardProps> = ({ student }) => 
                 </Button>
               </div>
 
+              {/* Subject Breakdown Table displaying Theory, Practical, Total for Science */}
               {showBreakdown && currentExam.subjects && currentExam.subjects.length > 0 && (
                 <div className="overflow-x-auto pt-2">
                   <table className="w-full text-left text-xs sm:text-sm">
                     <thead>
                       <tr className="bg-slate-100 dark:bg-slate-800 font-bold text-slate-700 dark:text-slate-300">
                         <th className="py-2.5 px-4 rounded-l-xl">Subject</th>
-                        <th className="py-2.5 px-4">Total Marks</th>
-                        <th className="py-2.5 px-4">Obtained Marks</th>
-                        <th className="py-2.5 px-4">Percentage</th>
-                        <th className="py-2.5 px-4 rounded-r-xl">Grade</th>
+                        <th className="py-2.5 px-3 text-center">Theory</th>
+                        <th className="py-2.5 px-3 text-center">Practical</th>
+                        <th className="py-2.5 px-4 text-center">Total Marks</th>
+                        <th className="py-2.5 px-4 text-center">Percentage</th>
+                        <th className="py-2.5 px-4 text-center rounded-r-xl">Grade</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                       {currentExam.subjects.map((sub: any, idx: number) => {
+                        const isScience = isScienceSubject(sub.name);
                         const total = Number(sub.totalMarks || 100);
                         const obtained = Number(sub.obtainedMarks || 0);
                         const pct = total > 0 ? ((obtained / total) * 100).toFixed(1) : "0";
+
+                        const theoryDisplay =
+                          sub.theory !== undefined && sub.theory !== null
+                            ? String(sub.theory)
+                            : !isScience && sub.obtainedMarks !== undefined && sub.obtainedMarks !== null
+                            ? String(sub.obtainedMarks)
+                            : "—";
+
+                        const practicalDisplay =
+                          isScience && sub.practical !== undefined && sub.practical !== null
+                            ? String(sub.practical)
+                            : isScience
+                            ? "0"
+                            : "—";
+
                         return (
                           <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                            <td className="py-2.5 px-4 font-semibold text-slate-900 dark:text-white">{sub.name}</td>
-                            <td className="py-2.5 px-4 text-slate-600 dark:text-slate-300">{total}</td>
-                            <td className="py-2.5 px-4 font-bold text-medical-600 dark:text-medical-400">{obtained}</td>
-                            <td className="py-2.5 px-4 font-semibold text-slate-700 dark:text-slate-300">{pct}%</td>
-                            <td className="py-2.5 px-4">
-                              <Badge variant={sub.grade === "A+" || sub.grade === "A" ? "gold" : "outline"} size="sm">
-                                {sub.grade || "—"}
+                            <td className="py-2.5 px-4 font-semibold text-slate-900 dark:text-white">
+                              {sub.name}
+                            </td>
+                            <td className="py-2.5 px-3 text-center text-slate-700 dark:text-slate-300 font-medium">
+                              {theoryDisplay}
+                            </td>
+                            <td className="py-2.5 px-3 text-center text-slate-700 dark:text-slate-300 font-medium">
+                              {practicalDisplay}
+                            </td>
+                            <td className="py-2.5 px-4 text-center font-bold text-medical-600 dark:text-medical-400">
+                              {obtained} / {total}
+                            </td>
+                            <td className="py-2.5 px-4 text-center font-semibold text-slate-700 dark:text-slate-300">
+                              {pct}%
+                            </td>
+                            <td className="py-2.5 px-4 text-center">
+                              <Badge
+                                variant={sub.grade === "A+" || sub.grade === "A" ? "gold" : sub.grade === "F" ? "outline" : "medical"}
+                                size="sm"
+                              >
+                                {sub.grade || calculateGrade(obtained, total)}
                               </Badge>
                             </td>
                           </tr>
@@ -206,10 +303,10 @@ export const ParentDashboard: React.FC<ParentDashboardProps> = ({ student }) => 
             <div className="text-center py-10 px-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-1.5">
               <Award className="w-7 h-7 text-slate-300 dark:text-slate-600 mx-auto" />
               <div className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                No examination results recorded yet for {activeExamPhase === "Assessment" ? "Monthly Assessment" : "Send-up Examination"}
+                No examination results recorded yet for {activeExamPhase === "Assessment" ? "Monthly Assessment" : `${activeExamPhase} Examination`}
               </div>
               <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                Official marks will be posted here once published by the college evaluation committee.
+                Official marks will be posted here once compiled and submitted by the section class teacher.
               </p>
             </div>
           )}

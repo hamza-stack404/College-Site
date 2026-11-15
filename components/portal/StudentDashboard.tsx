@@ -21,7 +21,7 @@ import {
   FileText,
 } from "lucide-react";
 import { getTimetableAction, getStudentExamResultsAction } from "@/lib/supabase/actions";
-import { FEE_TIERS } from "@/lib/data/constants";
+import { FEE_TIERS, ExamType, SUBJECT_MARKS, calculateGrade } from "@/lib/data/constants";
 
 interface StudentDashboardProps {
   student: StudentProfile;
@@ -32,8 +32,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ student }) =
   const [timetableImageUrl, setTimetableImageUrl] = useState<string | null>(null);
   const [isLoadingTimetable, setIsLoadingTimetable] = useState(true);
 
-  // Two separate exam phases (Assessment vs Send-up)
-  const [activeExamPhase, setActiveExamPhase] = useState<"Assessment" | "Send-up">("Assessment");
+  // Three exam phases (Assessment, Send-up, Pre-Board)
+  const [activeExamPhase, setActiveExamPhase] = useState<ExamType>("Send-up");
   const [showSubjectBreakdown, setShowSubjectBreakdown] = useState<boolean>(true);
 
   // Exam marks state from Supabase
@@ -133,32 +133,25 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ student }) =
           <div>
             <Badge variant="medical" size="sm">Academic Performance</Badge>
             <h4 className="font-display font-bold text-xl sm:text-2xl text-slate-900 dark:text-white mt-1">
-              Internal Examination Records (HSSC Part-I)
+              Internal Examination Records
             </h4>
           </div>
 
           {/* Stage Selector */}
           <div className="flex gap-2">
-            <button
-              onClick={() => setActiveExamPhase("Assessment")}
-              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
-                activeExamPhase === "Assessment"
-                  ? "bg-medical-600 text-white shadow-sm"
-                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-              }`}
-            >
-              Monthly Assessment
-            </button>
-            <button
-              onClick={() => setActiveExamPhase("Send-up")}
-              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
-                activeExamPhase === "Send-up"
-                  ? "bg-navy-950 text-white dark:bg-medical-500 dark:text-navy-950 shadow-sm"
-                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-              }`}
-            >
-              Send-up Examination
-            </button>
+            {(["Assessment", "Send-up", "Pre-Board"] as ExamType[]).map((phase) => (
+              <button
+                key={phase}
+                onClick={() => setActiveExamPhase(phase)}
+                className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
+                  activeExamPhase === phase
+                    ? "bg-navy-950 text-white dark:bg-medical-500 dark:text-navy-950 shadow-sm"
+                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                }`}
+              >
+                {phase === "Assessment" ? "Monthly Assessment" : `${phase} Examination`}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -209,26 +202,53 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ student }) =
                   <thead>
                     <tr className="bg-slate-100 dark:bg-slate-800 font-bold text-slate-700 dark:text-slate-300">
                       <th className="py-3 px-4 rounded-l-xl">Subject</th>
-                      <th className="py-3 px-4">Total Marks</th>
-                      <th className="py-3 px-4">Obtained Marks</th>
-                      <th className="py-3 px-4">Percentage</th>
-                      <th className="py-3 px-4 rounded-r-xl">Grade</th>
+                      <th className="py-3 px-3 text-center">Theory</th>
+                      <th className="py-3 px-3 text-center">Practical</th>
+                      <th className="py-3 px-4 text-center">Total Marks</th>
+                      <th className="py-3 px-4 text-center">Percentage</th>
+                      <th className="py-3 px-4 text-center rounded-r-xl">Grade</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {currentExam.subjects.map((sub: any, idx: number) => {
+                      const cfg = SUBJECT_MARKS[sub.name];
+                      const isScience = Boolean(cfg && cfg.practical > 0);
                       const total = Number(sub.totalMarks || 100);
                       const obtained = Number(sub.obtainedMarks || 0);
                       const pct = total > 0 ? ((obtained / total) * 100).toFixed(1) : "0";
+
+                      const theoryDisplay =
+                        sub.theory !== undefined && sub.theory !== null
+                          ? String(sub.theory)
+                          : !isScience && sub.obtainedMarks !== undefined && sub.obtainedMarks !== null
+                          ? String(sub.obtainedMarks)
+                          : "—";
+
+                      const practicalDisplay =
+                        isScience && sub.practical !== undefined && sub.practical !== null
+                          ? String(sub.practical)
+                          : isScience
+                          ? "0"
+                          : "—";
+
                       return (
                         <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                           <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white">{sub.name}</td>
-                          <td className="py-3 px-4 text-slate-600 dark:text-slate-300">{total}</td>
-                          <td className="py-3 px-4 font-bold text-medical-600 dark:text-medical-400">{obtained}</td>
-                          <td className="py-3 px-4 font-semibold text-slate-700 dark:text-slate-300">{pct}%</td>
-                          <td className="py-3 px-4">
-                            <Badge variant={sub.grade === "A+" || sub.grade === "A" ? "gold" : "outline"} size="sm">
-                              {sub.grade || "—"}
+                          <td className="py-3 px-3 text-center text-slate-700 dark:text-slate-300 font-medium">
+                            {theoryDisplay}
+                          </td>
+                          <td className="py-3 px-3 text-center text-slate-700 dark:text-slate-300 font-medium">
+                            {practicalDisplay}
+                          </td>
+                          <td className="py-3 px-4 text-center font-bold text-medical-600 dark:text-medical-400">
+                            {obtained} / {total}
+                          </td>
+                          <td className="py-3 px-4 text-center font-semibold text-slate-700 dark:text-slate-300">
+                            {pct}%
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <Badge variant={sub.grade === "A+" || sub.grade === "A" ? "gold" : sub.grade === "F" ? "outline" : "medical"} size="sm">
+                              {sub.grade || calculateGrade(obtained, total)}
                             </Badge>
                           </td>
                         </tr>
@@ -243,7 +263,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ student }) =
           <div className="text-center py-12 px-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-2">
             <Award className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto" />
             <div className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-              No examination results recorded yet for {activeExamPhase === "Assessment" ? "Monthly Assessment" : "Send-up Examination"}
+              No examination results recorded yet for {activeExamPhase === "Assessment" ? "Monthly Assessment" : `${activeExamPhase} Examination`}
             </div>
             <p className="text-xs text-slate-500 max-w-md mx-auto">
               Marks will appear here once officially uploaded and verified by your respective subject teachers.

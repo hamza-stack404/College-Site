@@ -47,59 +47,40 @@ export const AuthCard: React.FC<AuthCardProps> = ({
     setInfoMessage(null);
     setIsLoading(true);
 
-    console.log("[DEBUG] Login attempt started", { loginId, activeRole, isSupabaseConfigured });
-
     try {
       if (!isSupabaseConfigured) {
-        console.log("[DEBUG] isSupabaseConfigured is FALSE — using offline demo fallback");
         onLoginSuccess(loginId || "BCH-2026-0101", activeRole, "Muhammad Hamza Khan");
         return;
       }
 
       const internalEmail = loginIdToInternalEmail(loginId, activeRole);
-      console.log("[DEBUG] Mapped to internal email:", internalEmail);
-      console.log("[DEBUG] Calling supabase.auth.signInWithPassword...");
 
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: internalEmail,
         password: password,
       });
 
-      console.log("[DEBUG] signInWithPassword result:", { authData, authError });
-
       if (authError || !authData.user) {
-        console.log("[DEBUG] Auth failed as expected. Error:", authError?.message);
         setError("Incorrect ID or password. First time logging in? Use Create Password below.");
         return;
       }
 
-      console.log("[DEBUG] Auth SUCCEEDED for user id:", authData.user.id, "email:", authData.user.email);
-
       // Fetch profile to verify must_change_password & role
-      const { data: profile, error: profileErr } = await supabase
+      const { data: profile } = await supabase
         .from("profiles")
         .select("must_change_password, full_name, role")
         .eq("id", authData.user.id)
         .single();
 
-      console.log("[DEBUG] Profile fetch result:", { profile, profileErr });
-
-      if (profileErr) {
-        console.warn("Could not retrieve profile:", profileErr.message);
-      }
-
       if (profile?.must_change_password) {
-        console.log("[DEBUG] must_change_password is true — redirecting to create_password mode");
         // Switch user to Create Password mode to set a permanent password
         setAuthMode("create_password");
         setInfoMessage("First-time login detected. Please enter your temporary password to create a permanent password.");
         return;
       }
 
-      console.log("[DEBUG] Proceeding to onLoginSuccess with role:", activeRole);
       onLoginSuccess(loginId, activeRole, profile?.full_name);
     } catch (err: any) {
-      console.error("[DEBUG] Exception thrown during login:", err);
       setError(err.message || "An unexpected login error occurred. Please try again.");
     } finally {
       setIsLoading(false);
@@ -143,14 +124,10 @@ export const AuthCard: React.FC<AuthCardProps> = ({
       }
 
       // Update profile to mark must_change_password as false
-      const { error: updateProfileErr } = await supabase
+      await supabase
         .from("profiles")
         .update({ must_change_password: false })
         .eq("id", signData.user.id);
-
-      if (updateProfileErr) {
-        console.warn("Profile flag update note:", updateProfileErr.message);
-      }
 
       const { data: profile } = await supabase
         .from("profiles")
@@ -197,24 +174,6 @@ export const AuthCard: React.FC<AuthCardProps> = ({
             );
           })}
         </div>
-      </div>
-
-      {/* Temporary Diagnostic Debug Banner */}
-      <div style={{
-        color: "#000",
-        fontWeight: "bold",
-        padding: "12px",
-        background: "#FFEB3B",
-        textAlign: "center",
-        fontSize: "13px",
-        border: "3px solid red",
-        margin: "12px auto",
-        maxWidth: "500px",
-        borderRadius: "8px",
-      }}>
-        DEBUG — isSupabaseConfigured: {String(isSupabaseConfigured)}<br />
-        DEBUG — SUPABASE_URL: {process.env.NEXT_PUBLIC_SUPABASE_URL || "MISSING"}<br />
-        DEBUG — ANON_KEY present: {String(Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY))}
       </div>
 
       {/* Form Card */}

@@ -15,7 +15,7 @@ export const AnnouncementBar: React.FC = () => {
           </span>
           */}
           <span className="text-slate-300 font-medium">
-            Affiliated with BISE & FBISE • F.Sc Pre-Medical, Pre-Engineering & ICS
+            Affiliated with FBISE • F.Sc Pre-Medical, Pre-Engineering & ICS
           </span>
         </div>
 
@@ -26,7 +26,7 @@ export const AnnouncementBar: React.FC = () => {
             className="flex items-center gap-1.5 hover:text-white transition-colors"
           >
             <Phone className="w-3.5 h-3.5 text-medical-400" />
-            <span>+92 (21) 3485-9100 (PST 08:00 AM – 02:30 PM)</span>
+            <span>+92 0000000000 (PST 08:00 AM – 02:30 PM)</span>
           </a>
         </div>
       </div>

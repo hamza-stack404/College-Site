@@ -135,15 +135,15 @@ export interface StudentProfile {
   fatherName: string;
   group: "Pre-Medical" | "Pre-Engineering" | "Computer Science";
   classLevel: "11th" | "12th";
-  section: "Section A" | "Section B" | "Section C";
-  category: "Civilian" | "Armed Forces";
-  feeStatus: "Paid" | "Unpaid";
-  dueAmount: number;
-  timetable: {
+  section: string;
+  category?: "Civilian" | "Armed Forces";
+  feeStatus?: "Paid" | "Unpaid";
+  dueAmount?: number;
+  timetable?: {
     day: string;
     periods: { time: string; subject: string; teacher: string; room: string }[];
   }[];
-  internalExamResults: {
+  internalExamResults?: {
     examName: "1st Term Assessment" | "Mid-Term Send-Up" | "Pre-Board Mock";
     examDate: string;
     subjects: { name: string; totalMarks: number; obtainedMarks: number; grade: string }[];
@@ -151,7 +151,7 @@ export interface StudentProfile {
     totalMax: number;
     percentage: number;
   }[];
-  attendancePercentage: number;
+  attendancePercentage?: number;
   ptmTiming?: string;
 }
 
@@ -159,6 +159,10 @@ export interface TeacherProfile {
   id: string; // Teacher ID e.g. "TCH-004"
   name: string;
   subject: string;
+  isClassTeacher?: boolean;
+  classTeacherGroup?: "Pre-Medical" | "Pre-Engineering" | "Computer Science";
+  classTeacherLevel?: "11th" | "12th";
+  classTeacherSection?: string;
   classesTaught: {
     group: "Pre-Medical" | "Pre-Engineering" | "Computer Science";
     classLevel: "11th" | "12th";
